@@ -26,8 +26,7 @@
 #include <netdb.h>
 #endif
 
-#define GET_NAME "latest-" OS "-" ARCH
-#define FILE_NAME "uTox" EXT
+#define GET_NAME OS ARCH "-latest"
 #define HOST "dl.utox.org"
 
 static const uint8_t public_key[crypto_sign_ed25519_PUBLICKEYBYTES] = {
@@ -35,10 +34,19 @@ static const uint8_t public_key[crypto_sign_ed25519_PUBLICKEYBYTES] = {
     0x48, 0xF4, 0xBC, 0x4F, 0xEC, 0x1A, 0xD1, 0xAD, 0x6F, 0x97, 0x78, 0x6E, 0xFE, 0xF3, 0xCD, 0xA1
 };
 
-static const char request[] =
+static const char request_version[] =
+    "GET /version HTTP/1.0\r\n"
+    "Host: " HOST "\r\n"
+    "\r\n";
+
+static char request[] =
     "GET /" GET_NAME " HTTP/1.0\r\n"
     "Host: " HOST "\r\n"
     "\r\n";
+
+static char filename[] = GET_NAME;
+
+uint32_t inflate(void *dest, void *src, uint32_t dest_size, uint32_t src_len);
 
 int main(void)
 {
@@ -49,13 +57,30 @@ int main(void)
     uint32_t sock, len, dlen, rlen;
     unsigned long long mlen;
     uint8_t recvbuf[0x10000];
-    _Bool header;
+    _Bool header, force = 0;
 
     #ifdef __WIN32__
+    /* initialize winsock */
     WSADATA wsaData;
     if(WSAStartup(MAKEWORD(2,2), &wsaData) != 0) {
         printf("WSAStartup failed\n");
         return 1;
+    }
+
+    /* check if we are on a 64-bit system*/
+    _Bool iswow64 = 0;
+    _Bool (WINAPI *fnIsWow64Process)(HANDLE, _Bool*)  = (void*)GetProcAddress(GetModuleHandleA("kernel32"),"IsWow64Process");
+    if(fnIsWow64Process) {
+        fnIsWow64Process(GetCurrentProcess(), &iswow64);
+    }
+
+    if(iswow64) {
+        /* replace the arch in the request/filename strings (todo: not use constants for offsets) */
+        request[8] = '6';
+        request[9] = '4';
+        filename[3] = '6';
+        filename[4] = '4';
+        printf("detected 64bit system\n");
     }
     #endif
 
@@ -68,19 +93,82 @@ int main(void)
     do {
         printf("trying...\n");
 
-        sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+        sock = socket(info->ai_family, SOCK_STREAM, IPPROTO_TCP);
         if(sock == ~0) {
-            printf("socket failed\n");
+            printf("socket failed (1)\n");
             continue;
         }
 
         if(connect(sock, info->ai_addr, info->ai_addrlen) != 0) {
-            printf("connect failed\n");
+            printf("connect failed (1)\n");
             close(sock);
             continue;
         }
 
-        send(sock, request, sizeof(request) - 1, 0);
+        /* check if new version is available */
+        if(!force) {
+            if(send(sock, request_version, sizeof(request_version) - 1, 0) != sizeof(request_version) - 1) {
+                printf("send failed (1)\n");
+                close(sock);
+                continue;
+            }
+
+            len = recv(sock, recvbuf, 0xFFFF, 0);
+            close(sock);
+
+            if(len <= 0) {
+                printf("no/empty response\n");
+                continue;
+            }
+
+            /* work with a null-terminated buffer */
+            recvbuf[len] = 0;
+
+            /* find the end of the http response header */
+            str = strstr((char*)recvbuf, "\r\n\r\n");
+            if(!str) {
+                printf("invalid HTTP response (3)\n");
+                continue;
+            }
+
+            str += sizeof("\r\n\r\n") - 1;
+
+            /* check for valid version string */
+            if(strlen(str) > 6) {
+                printf("invalid version string\n");
+                continue;
+            }
+
+            strcpy(filename + sizeof(OS ARCH), str);
+            printf("Version: %s\n", str);
+
+            /* check if we already have this version */
+            file = fopen(filename, "rb");
+            if(file) {
+                printf("Already up to date\n", str);
+                fclose(file);
+                break;
+            }
+
+            /* reconnect for download */
+            sock = socket(info->ai_family, SOCK_STREAM, IPPROTO_TCP);
+            if(sock == ~0) {
+                printf("socket failed (2)\n");
+                continue;
+            }
+
+            if(connect(sock, info->ai_addr, info->ai_addrlen) != 0) {
+                printf("connect failed (2) \n");
+                close(sock);
+                continue;
+            }
+        }
+
+        if(send(sock, request, sizeof(request) - 1, 0) != sizeof(request) - 1) {
+            printf("send failed (2)\n");
+            close(sock);
+            continue;
+        }
 
         header = 1;
         while((len = recv(sock, recvbuf, 0xFFFF, 0)) > 0) {
@@ -119,8 +207,8 @@ int main(void)
                 str += sizeof("\r\n\r\n") - 1;
 
                 /* allocate buffer to read into + make room for signature checking (times 2) */
-                data = malloc(dlen * 2);
-                if(!data) {
+                mdata = malloc(dlen * 2);
+                if(!mdata) {
                     printf("malloc failed (1) (%u)\n", dlen);
                     break;
                 }
@@ -129,6 +217,7 @@ int main(void)
 
                 /* read the first piece */
                 rlen = len - (str - (char*)recvbuf);
+                data = mdata + dlen;
                 memcpy(data, str, rlen);
 
                 header = 0;
@@ -144,27 +233,47 @@ int main(void)
             continue;
         } else if(rlen != dlen) {
             printf("number of bytes read does not match (%u)\n", rlen);
-            free(data);
+            free(mdata);
             continue;
         }
 
-        mdata = data + dlen;
+        /* check signature */
         if(crypto_sign_ed25519_open(mdata, &mlen, data, dlen, public_key) == -1) {
             printf("invalid signature\n");
+            free(mdata);
+            break;
+        }
+
+        /* inflate (todo: not constant size) */
+#define SIZE 4 * 1024 * 1024
+        data = malloc(SIZE);
+        if(!data) {
+            printf("malloc failed (2) (%u)\n", SIZE);
+            free(mdata);
+            break;
+        }
+
+        len = inflate(data, mdata, SIZE, mlen);
+#undef SIZE
+        free(mdata);
+        if(len == 0) {
+            printf("inflate failed\n");
             free(data);
             break;
         }
 
-        file = fopen(FILE_NAME, "wb");
+        printf("Inflated size: %u\n", len);
+
+        file = fopen(filename, "wb");
         if(!file) {
             printf("fopen failed\n");
             free(data);
             break;
         }
 
-        rlen = fwrite(mdata, 1, mlen, file);
+        rlen = fwrite(data, 1, len, file);
         fclose(file);
-        if(rlen != mlen) {
+        if(rlen != len) {
             printf("write failed (%u)\n", rlen);
         }
         free(data);
@@ -172,5 +281,6 @@ int main(void)
     } while(info = info->ai_next);
 
     freeaddrinfo(root);
+    system(filename);
     return 0;
 }
