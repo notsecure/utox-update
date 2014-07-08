@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <string.h>
+#include <time.h>
 
 #include <sodium.h>
 #include "xz/xz.h"
@@ -271,6 +272,20 @@ int main(void)
             break;
         }
 
+        time_t now;
+        uint32_t t;
+        time(&now);
+        memcpy(&t, mdata, 4);
+
+        printf("built %u, now %u\n", t, now);
+
+        if(t < now && now - t >= 60 * 24 * 7) {
+            /* build is more than 1 week old: expired */
+            printf("expired build (%u)\n", now - t);
+            free(mdata);
+            break;
+        }
+
         /* inflate (todo: not constant size) */
 #define SIZE 4 * 1024 * 1024
         data = malloc(SIZE);
@@ -280,7 +295,7 @@ int main(void)
             break;
         }
 
-        len = inflate(data, mdata, SIZE, mlen);
+        len = inflate(data, mdata + 4, SIZE, mlen - 4);
 #undef SIZE
         free(mdata);
         if(len == 0) {
