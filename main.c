@@ -4,6 +4,7 @@
 #include <string.h>
 
 #include <sodium.h>
+#include "xz/xz.h"
 
 #ifdef __x86_64
 #define ARCH "64"
@@ -46,7 +47,33 @@ static char request[] =
 
 static char filename[] = GET_NAME;
 
-uint32_t inflate(void *dest, void *src, uint32_t dest_size, uint32_t src_len);
+uint32_t inflate(void *dest, void *src, uint32_t dest_size, uint32_t src_len)
+{
+    xz_crc32_init();
+
+    struct xz_dec *dec = xz_dec_init(XZ_SINGLE, 0);
+    if(!dec) {
+        return 0;
+    }
+
+    struct xz_buf buf = {
+        .in = src,
+        .in_pos = 0,
+        .in_size = src_len,
+
+        .out = dest,
+        .out_pos = 0,
+        .out_size = dest_size,
+    };
+
+    int r = xz_dec_run(dec, &buf);
+    xz_dec_end(dec);
+
+    printf("%i\n", r);
+
+    /* out_pos is only set on success*/
+    return buf.out_pos;
+}
 
 int main(void)
 {
@@ -145,7 +172,7 @@ int main(void)
             /* check if we already have this version */
             file = fopen(filename, "rb");
             if(file) {
-                printf("Already up to date\n", str);
+                printf("Already up to date\n");
                 fclose(file);
                 break;
             }
