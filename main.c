@@ -53,7 +53,7 @@ static char request[] =
     "Host: " HOST "\r\n"
     "\r\n";
 
-static char filename[] = GET_NAME;
+static char filename[128] = GET_NAME;
 static uint8_t recvbuf[0x10000];
 
 uint32_t inflate(void *dest, void *src, uint32_t dest_size, uint32_t src_len)
@@ -328,6 +328,7 @@ int main(void)
     if(file) {
         len = fread(filename + sizeof(OS ARCH), 1, 6, file);
         filename[sizeof(OS ARCH) + len] = 0;
+        strcat(filename, ".exe");
         fclose(file);
     }
 
@@ -381,6 +382,8 @@ int main(void)
             }
 
             strcpy(filename + sizeof(OS ARCH), str);
+            strcat(filename, ".exe");
+
             printf("Version: %s\n", str);
             free(str);
 
@@ -422,6 +425,6 @@ int main(void)
     } while(info = info->ai_next);
 
     freeaddrinfo(root);
-    system(filename);
+    ShellExecute(NULL, "open", filename, NULL, NULL, SW_SHOW);
     return 0;
 }
