@@ -31,7 +31,7 @@
 #define GET_NAME OS ARCH "-latest"
 #define HOST "dl.utox.org"
 
-#define VERSION 0
+#define VERSION 1
 
 static const uint8_t public_key[crypto_sign_ed25519_PUBLICKEYBYTES] = {
     0x88, 0x90, 0x5F, 0x29, 0x46, 0xBE, 0x7C, 0x4B, 0xBD, 0xEC, 0xE4, 0x67, 0x14, 0x9C, 0x1D, 0x78,
@@ -44,7 +44,7 @@ static const uint8_t self_update_public_key[crypto_sign_ed25519_PUBLICKEYBYTES] 
 };
 
 static const char request_version[] =
-    "GET /version HTTP/1.0\r\n"
+    "GET /version1 HTTP/1.0\r\n"
     "Host: " HOST "\r\n"
     "\r\n";
 
@@ -96,7 +96,7 @@ void* checksignature(void *data, uint32_t dlen, const uint8_t *pk, unsigned long
         return NULL;
     }
 
-    r = crypto_sign_ed25519_open(mdata, olen, data, dlen, public_key);
+    r = crypto_sign_ed25519_open(mdata, olen, data, dlen, pk);
     free(data);
 
     if(r == -1) {
@@ -139,7 +139,7 @@ void* download(int family, const void *addr, size_t addrlen, const char *request
 
             /* check for "Not Found" response (todo: only check first line of response)*/
             if(strstr((char*)recvbuf, "404 Not Found\r\n")) {
-                printf("Not Found: %s\n", GET_NAME);
+                printf("Not Found\n");
                 break;
             }
 
@@ -197,7 +197,7 @@ void* download(int family, const void *addr, size_t addrlen, const char *request
 
     if(!header) {
         /* read nothing or invalid header */
-        printf("error...\n");
+        printf("download() failed\n");
         return NULL;
     } else if(rlen != dlen) {
         printf("number of bytes read does not match (%u)\n", rlen);
@@ -209,44 +209,59 @@ void* download(int family, const void *addr, size_t addrlen, const char *request
     return data;
 }
 
-void *download_signed_compressed(int family, const void *addr, size_t addrlen, const char *request, uint16_t requestlen, uint32_t *olen, uint32_t maxlen, const uint8_t *pk)
+void *download_signed(int family, const void *addr, size_t addrlen, const char *request, uint16_t requestlen, uint32_t *olen, uint32_t maxlen, const uint8_t *pk)
 {
     void *data, *mdata;
     uint32_t len, t;
     time_t now;
     unsigned long long mlen;
 
-    data = download(family, addr,addrlen, request, requestlen, &len, 1024 * 1024 * 4);
+    data = download(family, addr, addrlen, request, requestlen, &len, maxlen + crypto_sign_ed25519_BYTES);
     if(!data) {
-        printf("file download failed\n");
         return NULL;
     }
 
     mdata = checksignature(data, len, pk, &mlen);
+    if(!mdata) {
+        return NULL;
+    }
 
     time(&now);
     memcpy(&t, mdata, 4);
 
-    printf("built %u, now %u\n", t, now);
+    printf("signed %u, now %u\n", t, now);
 
     if(t < now && now - t >= 60 * 60 * 24 * 7) {
         /* build is more than 1 week old: expired */
-        printf("expired build (%u)\n", now - t);
+        printf("expired signature (%u)\n", now - t);
         free(mdata);
         return NULL;
     }
 
-    /* inflate (todo: not constant size) */
-#define SIZE 4 * 1024 * 1024
-    data = malloc(SIZE);
+    *olen = mlen;
+    return mdata;
+}
+
+void *download_signed_compressed(int family, const void *addr, size_t addrlen, const char *request, uint16_t requestlen, uint32_t *olen, uint32_t maxlen, const uint8_t *pk)
+{
+    void *data, *mdata;
+    uint32_t len, mlen;
+
+    mdata = download_signed(family, addr, addrlen, request, requestlen, &mlen, maxlen, pk);
+    if(!mdata) {
+        printf("file download failed\n");
+        return NULL;
+    }
+
+    /* inflate */
+    data = malloc(maxlen);
     if(!data) {
-        printf("malloc failed (2) (%u)\n", SIZE);
+        printf("malloc failed (2) (%u)\n", maxlen);
         free(mdata);
         return NULL;
     }
 
-    len = inflate(data, mdata + 4, SIZE, mlen - 4);
-#undef SIZE
+    len = inflate(data, mdata + 4, maxlen, mlen - 4);
     free(mdata);
     if(len == 0) {
         printf("inflate failed\n");
@@ -343,24 +358,27 @@ int main(void)
 
         /* check if new version is available */
         if(!force) {
-            str = download(info->ai_family, info->ai_addr, info->ai_addrlen, request_version, sizeof(request_version) - 1, &len, 7);
-            if(!str) {
+            data = download_signed(info->ai_family, info->ai_addr, info->ai_addrlen, request_version, sizeof(request_version) - 1, &len, 7 + 4, public_key);
+            if(!data) {
                 printf("version download failed\n");
                 continue;
             }
 
-            if(len != 7) {
+            if(len != 7 + 4) {
                 printf("invalid version length (%u)\n", len);
-                free(str);
+                free(data);
                 continue;
             }
 
+            str = data + 4;
+            len -= 4;
+
             if(str[6] != VERSION + '0') {
                 printf("invalid updater version (%u)\n", str[6]);
-                free(str);
+                free(data);
 
                 /* update the updater */
-                memcpy(request + 8, "toxupdate", sizeof("toxupdate") - 1);
+                memcpy(request + 8, "selfpdate", sizeof("selfpdate") - 1);
                 data = download_signed_compressed(info->ai_family, info->ai_addr, info->ai_addrlen, request, sizeof(request) - 1, &len, 1024 * 1024 * 4, self_update_public_key);
                 if(!data) {
                     printf("self update download failed\n");
@@ -385,7 +403,7 @@ int main(void)
             strcat(filename, ".exe");
 
             printf("Version: %s\n", str);
-            free(str);
+            free(data);
 
             /* check if we already have this version */
             file = fopen(filename, "rb");
