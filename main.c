@@ -4,34 +4,29 @@
 #include <string.h>
 #include <time.h>
 
-#include <sodium.h>
-#include "xz/xz.h"
-
-#ifdef __x86_64
-#define ARCH "64"
-#else
-#define ARCH "32"
+#ifndef _WIN32_IE
+#define _WIN32_IE 0x300
 #endif
 
-#ifdef __WIN32__
-#define OS "win"
-#define EXT ".exe"
+#ifdef _WIN32_WINNT
+#undef _WIN32_WINNT
+#endif
+#define _WIN32_WINNT 0x501
+
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #include <windows.h>
+#include <process.h>
+#include <commctrl.h>
 #define close(x) closesocket(x)
-#else
-#define OS "linux"
-#define EXT ""
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <netdb.h>
-#endif
 
-#define GET_NAME OS ARCH "-latest"
+#include <sodium.h>
+#include "xz/xz.h"
+
+#define GET_NAME "win32-latest"
 #define HOST "dl.utox.org"
 
-#define VERSION 1
+#define VERSION 2
 
 static const uint8_t public_key[crypto_sign_ed25519_PUBLICKEYBYTES] = {
     0x88, 0x90, 0x5F, 0x29, 0x46, 0xBE, 0x7C, 0x4B, 0xBD, 0xEC, 0xE4, 0x67, 0x14, 0x9C, 0x1D, 0x78,
@@ -53,8 +48,15 @@ static char request[] =
     "Host: " HOST "\r\n"
     "\r\n";
 
-static char filename[128] = GET_NAME;
+static char filename[32] = GET_NAME;
 static uint8_t recvbuf[0x10000];
+
+static HHOOK hook;
+static int state;
+static void *addr;
+static int family, addrlen;
+static HWND progress_update;
+static _Bool restart;
 
 uint32_t inflate(void *dest, void *src, uint32_t dest_size, uint32_t src_len)
 {
@@ -132,7 +134,7 @@ void* download(int family, const void *addr, size_t addrlen, const char *request
         return NULL;
     }
 
-    while((len = recv(sock, recvbuf, 0xFFFF, 0)) > 0) {
+    while((len = recv(sock, (char*)recvbuf, 0xFFFF, 0)) > 0) {
         if(!header) {
             /* work with a null-terminated buffer */
             recvbuf[len] = 0;
@@ -191,6 +193,9 @@ void* download(int family, const void *addr, size_t addrlen, const char *request
         }
 
         memcpy(data + rlen, recvbuf, len); rlen += len;
+        if(progress_update) {
+            PostMessage(progress_update, PBM_SETPOS, (rlen * 100) / dlen, 0);
+        }
     }
 
     close(sock);
@@ -209,7 +214,7 @@ void* download(int family, const void *addr, size_t addrlen, const char *request
     return data;
 }
 
-void *download_signed(int family, const void *addr, size_t addrlen, const char *request, uint16_t requestlen, uint32_t *olen, uint32_t maxlen, const uint8_t *pk)
+void* download_signed(int family, const void *addr, size_t addrlen, const char *request, uint16_t requestlen, uint32_t *olen, uint32_t maxlen, const uint8_t *pk)
 {
     void *data, *mdata;
     uint32_t len, t;
@@ -229,11 +234,11 @@ void *download_signed(int family, const void *addr, size_t addrlen, const char *
     time(&now);
     memcpy(&t, mdata, 4);
 
-    printf("signed %u, now %u\n", t, now);
+    printf("signed %u, now %u\n", (uint32_t)t, (uint32_t)now);
 
     if(t < now && now - t >= 60 * 60 * 24 * 7) {
         /* build is more than 1 week old: expired */
-        printf("expired signature (%u)\n", now - t);
+        printf("expired signature (%u)\n", (uint32_t)(now - t));
         free(mdata);
         return NULL;
     }
@@ -242,7 +247,7 @@ void *download_signed(int family, const void *addr, size_t addrlen, const char *
     return mdata;
 }
 
-void *download_signed_compressed(int family, const void *addr, size_t addrlen, const char *request, uint16_t requestlen, uint32_t *olen, uint32_t maxlen, const uint8_t *pk)
+void* download_signed_compressed(int family, const void *addr, size_t addrlen, const char *request, uint16_t requestlen, uint32_t *olen, uint32_t maxlen, const uint8_t *pk)
 {
     void *data, *mdata;
     uint32_t len, mlen;
@@ -298,6 +303,8 @@ static _Bool selfupdate(void *data, uint32_t dlen)
 
     fwrite(data, 1, dlen, file);
     fclose(file);
+
+    ShellExecute(NULL, "open", file_path, NULL, NULL, SW_SHOW);
     return 1;
     #else
     /* self update not implemented */
@@ -305,16 +312,187 @@ static _Bool selfupdate(void *data, uint32_t dlen)
     #endif
 }
 
-int main(void)
+static void versioncheck_thread(void *arg)
 {
-    char *str;
-    void *data;
     FILE *file;
+    void *data;
+    char *str;
+    uint32_t len;
     struct addrinfo *root, *info;
-    uint32_t len, rlen;
-    _Bool force = 0;
+    _Bool newversion;
 
-    #ifdef __WIN32__
+    if(getaddrinfo(HOST, "80", NULL, &root) != 0) {
+        printf("getaddrinfo failed\n");
+        EndDialog(arg, 1);
+        return;
+    }
+
+    info = root;
+    newversion = 0;
+    do {
+        data = download_signed(info->ai_family, info->ai_addr, info->ai_addrlen, request_version, sizeof(request_version) - 1, &len, 7 + 4, public_key);
+        if(!data) {
+            printf("version download failed\n");
+            continue;
+        }
+
+        if(len != 7 + 4) {
+            printf("invalid version length (%u)\n", len);
+            free(data);
+            continue;
+        }
+
+        str = data + 4;
+        len -= 4;
+
+        if(str[6] > VERSION + '0') {
+            printf("new updater version available (%u)\n", str[6]);
+            free(data);
+
+            memcpy(request + 8, "selfpdate", sizeof("selfpdate") - 1);
+            data = download_signed_compressed(info->ai_family, info->ai_addr, info->ai_addrlen, request, sizeof(request) - 1, &len, 1024 * 1024 * 4, self_update_public_key);
+            if(!data) {
+                printf("self update download failed\n");
+                break;
+            }
+
+            if(selfupdate(data, len)) {
+                printf("successful self update\n");
+                filename[0] = 0;
+                restart = 1;
+            }
+            free(data);
+            break;
+        }
+
+        if(str[5] == ' ') {
+            str[5] = 0;
+        } else {
+            str[6] = 0;
+        }
+
+        strcpy(filename + 6, str);
+        strcat(filename, ".exe");
+        printf("Version: %s\n", str);
+        free(data);
+
+        /* check if we already have this version */
+        file = fopen(filename, "rb");
+        if(file) {
+            printf("Already up to date\n");
+            fclose(file);
+            break;
+        }
+
+        family = info->ai_family;
+        addrlen = info->ai_addrlen;
+        addr = malloc(addrlen);
+        if(!addr) {
+            break;
+        }
+
+        memcpy(addr, info->ai_addr, addrlen);
+        newversion = 1;
+        break;
+    } while((info = info->ai_next));
+
+    freeaddrinfo(root);
+    EndDialog(arg, !newversion);
+}
+
+static void download_thread(void *arg)
+{
+    FILE *file;
+    void *data;
+    uint32_t len, rlen;
+
+    HWND *hwnd = arg;
+
+    progress_update = hwnd[1];
+    data = download_signed_compressed(family, addr, addrlen, request, sizeof(request) - 1, &len, 1024 * 1024 * 4, public_key);
+    progress_update = NULL;
+    if(!data) {
+        goto FAIL;
+    }
+
+    printf("Inflated size: %u\n", len);
+
+    /* delete old version */
+    file = fopen("version", "rb");
+    if(file) {
+        char oldname[32];
+        rlen = fread(oldname, 1, sizeof(oldname) - 1, file);
+        oldname[rlen] = 0;
+
+        DeleteFile(oldname);
+        fclose(file);
+    }
+
+    /* write file */
+    file = fopen(filename, "wb");
+    if(!file) {
+        printf("fopen failed\n");
+        free(data);
+        goto FAIL;
+    }
+
+    rlen = fwrite(data, 1, len, file);
+    fclose(file);
+    free(data);
+    if(rlen != len) {
+        printf("write failed (%u)\n", rlen);
+        goto FAIL;
+    }
+
+    /* write version to file */
+    file = fopen("version", "wb");
+    if(file) {
+        fprintf(file, "%s", filename);
+        fclose(file);
+    }
+
+    EndDialog(hwnd[0], 0);
+    return;
+FAIL:
+    EndDialog(hwnd[0], 1);
+}
+
+static LRESULT CALLBACK HookProc(INT nCode, WPARAM wParam, LPARAM lParam)
+{
+    if(state && nCode == HC_ACTION) {
+        CWPSTRUCT* p = (CWPSTRUCT*)lParam;
+        if(p->message == WM_INITDIALOG) {
+            char pszClassName[8];
+            GetClassName(p->hwnd, pszClassName, sizeof(pszClassName));
+            if(strcmp(pszClassName, "#32770") == 0) {
+                HWND wnd;
+                wnd = FindWindowEx(p->hwnd, NULL, NULL, "OK");
+                if(wnd) {
+                    SetWindowText(wnd, "Cancel");
+                }
+
+                if(state == 2) {
+                    RECT r;
+                    GetClientRect(p->hwnd, &r);
+                    wnd = CreateWindowEx(0, PROGRESS_CLASS, NULL, WS_CHILD | WS_VISIBLE | PBS_SMOOTH, 10, 50, r.right - 20, 30, p->hwnd, NULL, GetModuleHandle(NULL), NULL);
+
+                    HWND *arg = malloc(sizeof(HWND) * 2);
+                    arg[0] = p->hwnd;
+                    arg[1] = wnd;
+                    _beginthread(download_thread, 0, arg);
+                } else {
+                    _beginthread(versioncheck_thread, 0, p->hwnd);
+                }
+            }
+        }
+    }
+    return CallNextHookEx(hook, nCode, wParam, lParam);
+}
+
+int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow)
+{
+    FILE *file;
+    uint32_t len;
     /* initialize winsock */
     WSADATA wsaData;
     if(WSAStartup(MAKEWORD(2,2), &wsaData) != 0) {
@@ -337,112 +515,50 @@ int main(void)
         filename[4] = '4';
         printf("detected 64bit system\n");
     }
-    #endif
 
-    file = fopen("version", "rb");
-    if(file) {
-        len = fread(filename + sizeof(OS ARCH), 1, 6, file);
-        filename[sizeof(OS ARCH) + len] = 0;
-        strcat(filename, ".exe");
-        fclose(file);
+    /* init common controls */
+    INITCOMMONCONTROLSEX InitCtrlEx;
+
+    InitCtrlEx.dwSize = sizeof(INITCOMMONCONTROLSEX);
+	InitCtrlEx.dwICC = ICC_PROGRESS_CLASS;
+	InitCommonControlsEx(&InitCtrlEx);
+
+    /* run */
+    hook = SetWindowsHookEx(WH_CALLWNDPROC, HookProc, hInstance, GetCurrentThreadId());
+
+    state = 1;
+    if(MessageBox(NULL, "Checking for new updates...", "uTox Updater", MB_OK)) {
+        goto END;
     }
 
-    if(getaddrinfo(HOST, "80", NULL, &root) != 0) {
-        printf("getaddrinfo failed\n");
-        return 1;
+    state = 0;
+    if(MessageBox(NULL, "A new version of uTox is available.\nUpdate?", "uTox Updater", MB_YESNO | MB_ICONQUESTION) != IDYES) {
+        goto END;
     }
 
-    info = root;
-    do {
-        printf("trying...\n");
+    state = 2;
+    if(MessageBox(NULL, "Downloading update\t\t\t\t\t\t\n\n\n", "uTox Updater", MB_OK)) {
+        goto END;
+    }
 
-        /* check if new version is available */
-        if(!force) {
-            data = download_signed(info->ai_family, info->ai_addr, info->ai_addrlen, request_version, sizeof(request_version) - 1, &len, 7 + 4, public_key);
-            if(!data) {
-                printf("version download failed\n");
-                continue;
-            }
+    state = 0;
+    MessageBox(NULL, "Update successful.", "uTox Updater", MB_OK);
 
-            if(len != 7 + 4) {
-                printf("invalid version length (%u)\n", len);
-                free(data);
-                continue;
-            }
+    printf("sucesss!\n");
 
-            str = data + 4;
-            len -= 4;
-
-            if(str[6] != VERSION + '0') {
-                printf("invalid updater version (%u)\n", str[6]);
-                free(data);
-
-                /* update the updater */
-                memcpy(request + 8, "selfpdate", sizeof("selfpdate") - 1);
-                data = download_signed_compressed(info->ai_family, info->ai_addr, info->ai_addrlen, request, sizeof(request) - 1, &len, 1024 * 1024 * 4, self_update_public_key);
-                if(!data) {
-                    printf("self update download failed\n");
-                    break;
-                }
-
-                if(selfupdate(data, len)) {
-                    printf("successful self update\n");
-                    filename[0] = 0;
-                }
-                free(data);
-                break;
-            }
-
-            if(str[5] == ' ') {
-                str[5] = 0;
-            } else {
-                str[6] = 0;
-            }
-
-            strcpy(filename + sizeof(OS ARCH), str);
-            strcat(filename, ".exe");
-
-            printf("Version: %s\n", str);
-            free(data);
-
-            /* check if we already have this version */
-            file = fopen(filename, "rb");
-            if(file) {
-                printf("Already up to date\n");
-                fclose(file);
-                break;
-            }
-        }
-
-        data = download_signed_compressed(info->ai_family, info->ai_addr, info->ai_addrlen, request, sizeof(request) - 1, &len, 1024 * 1024 * 4, public_key);
-
-        printf("Inflated size: %u\n", len);
-
-        file = fopen(filename, "wb");
-        if(!file) {
-            printf("fopen failed\n");
-            free(data);
-            break;
-        }
-
-        rlen = fwrite(data, 1, len, file);
-        fclose(file);
-        if(rlen != len) {
-            printf("write failed (%u)\n", rlen);
-        }
-        free(data);
-
-        /* write the version to a file */
-            file = fopen("version", "wb");
+    END:
+    if(!restart) {
+        file = fopen("version", "rb");
         if(file) {
-            fwrite(filename + sizeof(OS ARCH), strlen(filename + sizeof(OS ARCH)), 1, file);
+            len = fread(filename, 1, sizeof(filename) - 1, file);
+            filename[len] = 0;
             fclose(file);
         }
 
-        break;
-    } while(info = info->ai_next);
+        ShellExecute(NULL, "open", filename, NULL, NULL, SW_SHOW);
+    }
 
-    freeaddrinfo(root);
-    ShellExecute(NULL, "open", filename, NULL, NULL, SW_SHOW);
+    free(addr);
+    UnhookWindowsHookEx(hook);
     return 0;
 }
