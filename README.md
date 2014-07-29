@@ -5,7 +5,7 @@ downloads signed updates from dl.utox.org
 
 1. Builds are made locally and signed with libsodium's crypto_sign_ed25519() and my secret signing key then uploaded to dl.utox.org
 
-2. Updater reads the latest version (dl.utox.org/version1 - 64 byte signature - 4 byte timestamp - 7 byte version string), if it already has this version it skips to last step
+2. Updater reads the latest version (dl.utox.org/version), if it already has this version it skips to last step
 
 3. Downloads dl.utox.org/OSARCH-latest over http (ex: win64-latest  for windows 64 bit)
 
@@ -19,13 +19,9 @@ downloads signed updates from dl.utox.org
 
 #Building
 
-Windows:
+>windres icon.rc -O coff -o icon.res
 
->gcc main.c ./xz/*.c -lws2_32 -lsodium -s -Ofast
-
-Linux:
-
->gcc main.c ./xz/*.c -lsodium -s -Ofast
+>gcc icon.res main.c ./xz/*.c -lcomctl32 -lws2_32 -lsodium -s -Ofast
 
 #Todo
 
