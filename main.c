@@ -5,19 +5,21 @@
 #include <time.h>
 
 #ifndef _WIN32_IE
-#define _WIN32_IE 0x300
+#define _WIN32_IE 0x0800
 #endif
 
 #ifdef _WIN32_WINNT
 #undef _WIN32_WINNT
 #endif
-#define _WIN32_WINNT 0x501
+#define _WIN32_WINNT 0x0600
 
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #include <windows.h>
 #include <process.h>
 #include <commctrl.h>
+#include <shobjidl.h>
+#include <shlobj.h>
 #define close(x) closesocket(x)
 
 #include <sodium.h>
@@ -531,9 +533,75 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
         goto END;
     }
 
+    file = fopen("version", "rb");
     state = 0;
-    if(MessageBox(NULL, "A new version of uTox is available.\nUpdate?", "uTox Updater", MB_YESNO | MB_ICONQUESTION) != IDYES) {
-        goto END;
+    if(file) {
+        fclose(file);
+
+        if(MessageBox(NULL, "A new version of uTox is available.\nUpdate?", "uTox Updater", MB_YESNO | MB_ICONQUESTION) != IDYES) {
+            goto END;
+        }
+    } else {
+        HRESULT hr;
+        _Bool quit = 0;
+        wchar_t selfpath[MAX_PATH];
+        GetModuleFileNameW(hInstance, selfpath, MAX_PATH);
+
+        hr = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
+        if(SUCCEEDED(hr)) {
+            IFileOpenDialog *pFileOpen;
+            hr = CoCreateInstance(&CLSID_FileOpenDialog, NULL, CLSCTX_ALL, &IID_IFileOpenDialog, (void*)&pFileOpen);
+            if(SUCCEEDED(hr)) {
+                hr = pFileOpen->lpVtbl->SetOptions(pFileOpen, FOS_PICKFOLDERS);
+                hr = pFileOpen->lpVtbl->SetTitle(pFileOpen, L"Install Location");
+                hr = pFileOpen->lpVtbl->Show(pFileOpen, NULL);
+                if(SUCCEEDED(hr)) {
+                    IShellItem *pItem;
+                    hr = pFileOpen->lpVtbl->GetResult(pFileOpen, &pItem);
+                    if(SUCCEEDED(hr)) {
+                        PWSTR pszFilePath;
+                        hr = pItem->lpVtbl->GetDisplayName(pItem, SIGDN_FILESYSPATH, &pszFilePath);
+
+                        // Display the file name to the user.
+                        if(SUCCEEDED(hr)) {
+                            SetCurrentDirectoryW(pszFilePath);
+                            CreateDirectory("Tox", NULL);
+                            SetCurrentDirectory("Tox");
+                            CoTaskMemFree(pszFilePath);
+                            CopyFileW(selfpath, L"utox_updater.exe", 1);
+                        }
+                        pItem->lpVtbl->Release(pItem);
+                    }
+                } else {
+                    quit = 1;
+                }
+                pFileOpen->lpVtbl->Release(pFileOpen);
+            }
+            CoUninitialize();
+        }
+
+        if(quit) {
+            goto END;
+        }
+
+        if(!SUCCEEDED(hr)) {
+            wchar_t path[MAX_PATH];
+            BROWSEINFOW bi = {
+                .pszDisplayName = path,
+                .lpszTitle = L"Install Location",
+                .ulFlags = BIF_USENEWUI | BIF_NONEWFOLDERBUTTON,
+            };
+            LPITEMIDLIST lpItem = SHBrowseForFolderW(&bi);
+            if(!lpItem) {
+                goto END;
+            }
+
+            SHGetPathFromIDListW(lpItem, path);
+            SetCurrentDirectoryW(path);
+            CreateDirectory("Tox", NULL);
+            SetCurrentDirectory("Tox");
+            CopyFileW(selfpath, L"utox_updater.exe", 1);
+        }
     }
 
     state = 2;
