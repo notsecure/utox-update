@@ -582,7 +582,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR cmd, int n
         }
     } else {
         state = 3;
-        if(MessageBox(NULL, "\t\t\t\t\t\t\r\n\r\n\r\n", "uTox Updater", MB_OKCANCEL) != IDOK) {
+        if(MessageBox(NULL, "\t\t\t\t\t\t\r\n\r\n\r\n\r\n\r\n\r\n", "uTox Updater", MB_OKCANCEL) != IDOK) {
             goto END;
         }
 
