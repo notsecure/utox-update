@@ -59,6 +59,7 @@ static void *addr;
 static int family, addrlen;
 static HWND progress_update;
 static _Bool restart;
+static _Bool enable[3];
 
 uint32_t inflate(void *dest, void *src, uint32_t dest_size, uint32_t src_len)
 {
@@ -464,13 +465,15 @@ static LRESULT CALLBACK HookProc(INT nCode, WPARAM wParam, LPARAM lParam)
     if(state && nCode == HC_ACTION) {
         CWPSTRUCT* p = (CWPSTRUCT*)lParam;
         if(p->message == WM_INITDIALOG) {
-            char pszClassName[8];
+            char pszClassName[32];
             GetClassName(p->hwnd, pszClassName, sizeof(pszClassName));
             if(strcmp(pszClassName, "#32770") == 0) {
                 HWND wnd;
-                wnd = FindWindowEx(p->hwnd, NULL, NULL, "OK");
-                if(wnd) {
-                    SetWindowText(wnd, "Cancel");
+                if(state == 1 || state == 2) {
+                    wnd = FindWindowEx(p->hwnd, NULL, NULL, "OK");
+                    if(wnd) {
+                        SetWindowText(wnd, "Cancel");
+                    }
                 }
 
                 if(state == 2) {
@@ -482,8 +485,32 @@ static LRESULT CALLBACK HookProc(INT nCode, WPARAM wParam, LPARAM lParam)
                     arg[0] = p->hwnd;
                     arg[1] = wnd;
                     _beginthread(download_thread, 0, arg);
-                } else {
+                } else if (state == 1) {
                     _beginthread(versioncheck_thread, 0, p->hwnd);
+                } else {
+                    RECT r;
+                    GetClientRect(p->hwnd, &r);
+                    WPARAM font = (WPARAM)GetStockObject(DEFAULT_GUI_FONT);
+                    wnd = CreateWindowEx(0, "Button", "Create Start Menu shortcut", WS_TABSTOP | WS_VISIBLE | WS_CHILD | BS_AUTOCHECKBOX, 15, 10, r.right - 20, 25, p->hwnd, (HMENU)0x8000, GetModuleHandle(NULL), NULL);
+                    SendMessage(wnd, WM_SETFONT, font, 0);
+                    SendMessage(wnd, BM_SETCHECK, BST_CHECKED, 0); enable[0] = 1;
+                    wnd = CreateWindowEx(0, "Button", "Create Desktop shortcut", WS_TABSTOP | WS_VISIBLE | WS_CHILD | BS_AUTOCHECKBOX, 15, 35, r.right - 20, 25, p->hwnd, (HMENU)0x8001, GetModuleHandle(NULL), NULL);
+                    SendMessage(wnd, WM_SETFONT, font, 1);
+                    SendMessage(wnd, BM_SETCHECK, BST_CHECKED, 0); enable[1] = 1;
+                    wnd = CreateWindowEx(0, "Button", "Open tox:// URLs with uTox", WS_TABSTOP | WS_VISIBLE | WS_CHILD | BS_AUTOCHECKBOX, 15, 60, r.right - 20, 25, p->hwnd, (HMENU)0x8002, GetModuleHandle(NULL), NULL);
+                    SendMessage(wnd, WM_SETFONT, font, 1);
+                    SendMessage(wnd, BM_SETCHECK, BST_CHECKED, 0); enable[2] = 1;
+                    //printf("nigger %u\n", wnd);
+                }
+            }
+        }
+
+        if(state == 3 && p->message == WM_COMMAND) {
+            char pszClassName[32];
+            GetClassName(p->hwnd, pszClassName, sizeof(pszClassName));
+            if(strcmp(pszClassName, "#32770") == 0) {
+                if(p->wParam & 0x8000) {
+                    enable[p->wParam & 3] = !enable[p->wParam & 3];
                 }
             }
         }
@@ -491,8 +518,20 @@ static LRESULT CALLBACK HookProc(INT nCode, WPARAM wParam, LPARAM lParam)
     return CallNextHookEx(hook, nCode, wParam, lParam);
 }
 
-int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow)
+int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR cmd, int nCmdShow)
 {
+    if(*cmd) {
+        HMODULE hModule = GetModuleHandle(NULL);
+        char path[MAX_PATH], *s;
+        int len = GetModuleFileName(hModule, path, MAX_PATH);
+        s = path + len;
+        while(*s != '\\') {
+            s--;
+        }
+        *s = 0;
+        SetCurrentDirectory(path);
+    }
+
     FILE *file;
     uint32_t len;
     /* initialize winsock */
@@ -534,14 +573,23 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     }
 
     file = fopen("version", "rb");
-    state = 0;
     if(file) {
         fclose(file);
 
+        state = 0;
         if(MessageBox(NULL, "A new version of uTox is available.\nUpdate?", "uTox Updater", MB_YESNO | MB_ICONQUESTION) != IDYES) {
             goto END;
         }
     } else {
+        state = 3;
+        if(MessageBox(NULL, "\t\t\t\t\t\t\r\n\r\n\r\n", "uTox Updater", MB_OKCANCEL) != IDOK) {
+            goto END;
+        }
+
+        printf("options: %u %u %u\n", enable[0], enable[1], enable[2]);
+
+        state = 0;
+
         HRESULT hr;
         _Bool quit = 0;
         wchar_t selfpath[MAX_PATH];
@@ -552,6 +600,19 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
             IFileOpenDialog *pFileOpen;
             hr = CoCreateInstance(&CLSID_FileOpenDialog, NULL, CLSCTX_ALL, &IID_IFileOpenDialog, (void*)&pFileOpen);
             if(SUCCEEDED(hr)) {
+                /*wchar_t *sh_path;
+                hr = SHGetKnownFolderPath(&FOLDERID_ProgramFiles, 0, NULL, &sh_path);
+                if(SUCCEEDED(hr)) {
+                    IShellItem *si;
+                    hr = SHCreateItemFromParsingName(sh_path, NULL, &IID_IShellItem, (void**)&si);
+                    if(SUCCEEDED(hr)) {
+                        hr = pFileOpen->lpVtbl->SetDefaultFolder(pFileOpen, si);
+                        si->lpVtbl->Release(si);
+                    }
+
+                    CoTaskMemFree(sh_path);
+                }*/
+
                 hr = pFileOpen->lpVtbl->SetOptions(pFileOpen, FOS_PICKFOLDERS);
                 hr = pFileOpen->lpVtbl->SetTitle(pFileOpen, L"Install Location");
                 hr = pFileOpen->lpVtbl->Show(pFileOpen, NULL);
@@ -568,7 +629,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
                             CreateDirectory("Tox", NULL);
                             SetCurrentDirectory("Tox");
                             CoTaskMemFree(pszFilePath);
-                            CopyFileW(selfpath, L"utox_updater.exe", 1);
+                            CopyFileW(selfpath, L"utox_updater.exe", 0);
                         }
                         pItem->lpVtbl->Release(pItem);
                     }
@@ -577,10 +638,12 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
                 }
                 pFileOpen->lpVtbl->Release(pFileOpen);
             }
-            CoUninitialize();
+        } else {
+            quit = 1;
         }
 
         if(quit) {
+            //CoUninitialize();
             goto END;
         }
 
@@ -600,12 +663,91 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
             SetCurrentDirectoryW(path);
             CreateDirectory("Tox", NULL);
             SetCurrentDirectory("Tox");
-            CopyFileW(selfpath, L"utox_updater.exe", 1);
+            CopyFileW(selfpath, L"utox_updater.exe", 0);
         }
+
+        char dir[MAX_PATH];
+        if(enable[0] || enable[1]) {
+            //start menu
+            IShellLink* psl;
+
+            // Get a pointer to the IShellLink interface. It is assumed that CoInitialize
+            // has already been called.
+            hr = CoCreateInstance(&CLSID_ShellLink, NULL, CLSCTX_INPROC_SERVER, &IID_IShellLink, (LPVOID*)&psl);
+            if(SUCCEEDED(hr)) {
+                IPersistFile* ppf;
+
+                // Set the path to the shortcut target and add the description.
+
+                GetCurrentDirectory(MAX_PATH, dir);
+                psl->lpVtbl->SetWorkingDirectory(psl, dir);
+                strcat(dir, "\\utox_updater.exe");
+                psl->lpVtbl->SetPath(psl, dir);
+                psl->lpVtbl->SetDescription(psl, "Tox");
+
+                // Query IShellLink for the IPersistFile interface, used for saving the
+                // shortcut in persistent storage.
+                hr = psl->lpVtbl->QueryInterface(psl, &IID_IPersistFile, (LPVOID*)&ppf);
+
+                if(SUCCEEDED(hr)) {
+                    wchar_t wsz[MAX_PATH];
+                    if(enable[0]) {
+                        hr = SHGetFolderPathW(NULL, CSIDL_STARTMENU, NULL, 0, wsz);
+                        if(SUCCEEDED(hr)) {
+                            printf("%ls\n", wsz);
+                            wcscat(wsz, L"\\Programs\\Tox.lnk");
+                            hr = ppf->lpVtbl->Save(ppf, wsz, TRUE);
+                        }
+                    }
+
+                    if(enable[1]) {
+                        hr = SHGetFolderPathW(NULL, CSIDL_DESKTOPDIRECTORY, NULL, 0, wsz);
+                        if(SUCCEEDED(hr)) {
+                            wcscat(wsz, L"\\Tox.lnk");
+                            hr = ppf->lpVtbl->Save(ppf, wsz, TRUE);
+                        }
+                    }
+
+                    ppf->lpVtbl->Release(ppf);
+                }
+                psl->lpVtbl->Release(psl);
+            }
+        }
+
+        if(enable[2]) {
+            GetCurrentDirectory(MAX_PATH, dir);
+            strcat(dir, "\\utox_updater.exe");
+
+            char str[MAX_PATH];
+
+            HKEY key;
+            if(RegCreateKeyEx(HKEY_CLASSES_ROOT, "tox", 0, NULL, 0, KEY_ALL_ACCESS, NULL, &key, NULL) == ERROR_SUCCESS) {
+                printf("nice\n");
+                RegSetValueEx(key, NULL, 0, REG_SZ, (BYTE*)"URL:Tox Protocol", sizeof("URL:Tox Protocol"));
+                RegSetValueEx(key, "URL Protocol", 0, REG_SZ, (BYTE*)"", sizeof(""));
+
+                HKEY key2;
+                if(RegCreateKeyEx(key, "DefaultIcon", 0, NULL, 0, KEY_ALL_ACCESS, NULL, &key2, NULL) == ERROR_SUCCESS) {
+                    int i = sprintf(str, "%s,101", dir) + 1;
+                    RegSetValueEx(key2, NULL, 0, REG_SZ, (BYTE*)str, i);
+                }
+
+                if(RegCreateKeyEx(key, "shell", 0, NULL, 0, KEY_ALL_ACCESS, NULL, &key2, NULL) == ERROR_SUCCESS) {
+                    if(RegCreateKeyEx(key2, "open", 0, NULL, 0, KEY_ALL_ACCESS, NULL, &key, NULL) == ERROR_SUCCESS) {
+                        if(RegCreateKeyEx(key, "command", 0, NULL, 0, KEY_ALL_ACCESS, NULL, &key2, NULL) == ERROR_SUCCESS) {
+                            int i = sprintf(str, "%s %%1", dir) + 1;
+                            RegSetValueEx(key2, NULL, 0, REG_SZ, (BYTE*)str, i);
+                        }
+                    }
+                }
+            }
+        }
+
+        CoUninitialize();
     }
 
     state = 2;
-    if(MessageBox(NULL, "Downloading update\t\t\t\t\t\t\n\n\n", "uTox Updater", MB_OK)) {
+    if(MessageBox(NULL, "Downloading update\t\t\t\t\t\t\r\n\r\n\r\n\r\n", "uTox Updater", MB_OK)) {
         goto END;
     }
 
@@ -623,7 +765,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
             fclose(file);
         }
 
-        ShellExecute(NULL, "open", filename, NULL, NULL, SW_SHOW);
+        ShellExecute(NULL, "open", filename, cmd, NULL, SW_SHOW);
     }
 
     free(addr);
