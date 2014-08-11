@@ -629,7 +629,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR cmd, int n
                             CreateDirectory("Tox", NULL);
                             SetCurrentDirectory("Tox");
                             CoTaskMemFree(pszFilePath);
-                            CopyFileW(selfpath, L"utox_updater.exe", 0);
+                            CopyFileW(selfpath, L"utox_runner.exe", 0);
                         }
                         pItem->lpVtbl->Release(pItem);
                     }
@@ -663,7 +663,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR cmd, int n
             SetCurrentDirectoryW(path);
             CreateDirectory("Tox", NULL);
             SetCurrentDirectory("Tox");
-            CopyFileW(selfpath, L"utox_updater.exe", 0);
+            CopyFileW(selfpath, L"utox_runner.exe", 0);
         }
 
         char dir[MAX_PATH];
@@ -681,7 +681,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR cmd, int n
 
                 GetCurrentDirectory(MAX_PATH, dir);
                 psl->lpVtbl->SetWorkingDirectory(psl, dir);
-                strcat(dir, "\\utox_updater.exe");
+                strcat(dir, "\\utox_runner.exe");
                 psl->lpVtbl->SetPath(psl, dir);
                 psl->lpVtbl->SetDescription(psl, "Tox");
 
@@ -716,7 +716,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR cmd, int n
 
         if(enable[2]) {
             GetCurrentDirectory(MAX_PATH, dir);
-            strcat(dir, "\\utox_updater.exe");
+            strcat(dir, "\\utox_runner.exe");
 
             char str[MAX_PATH];
 
