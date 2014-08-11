@@ -239,7 +239,7 @@ void* download_signed(int family, const void *addr, size_t addrlen, const char *
 
     printf("signed %u, now %u\n", (uint32_t)t, (uint32_t)now);
 
-    if(t < now && now - t >= 60 * 60 * 24 * 7) {
+    if(t < now && now - t >= 60 * 60 * 24 * 8) {
         /* build is more than 1 week old: expired */
         printf("expired signature (%u)\n", (uint32_t)(now - t));
         free(mdata);

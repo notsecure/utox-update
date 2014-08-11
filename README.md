@@ -21,7 +21,7 @@ downloads signed updates from dl.utox.org
 
 >windres icon.rc -O coff -o icon.res
 
->gcc icon.res main.c ./xz/*.c -lcomctl32 -lws2_32 -lsodium -s -Ofast
+>gcc icon.res main.c ./xz/*.c -lcomctl32 -luuid -lole32 -lgdi32 -lws2_32 -lsodium -s -Ofast
 
 #Todo
 
