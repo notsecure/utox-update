@@ -189,7 +189,7 @@ void* download(int family, const void *addr, size_t addrlen, const char *request
             continue;
         }
 
-        /* check if recieved too much */
+        /* check if received too much */
         if(rlen + len > dlen) {
             printf("bad download\n");
             break;
@@ -500,7 +500,6 @@ static LRESULT CALLBACK HookProc(INT nCode, WPARAM wParam, LPARAM lParam)
                     wnd = CreateWindowEx(0, "Button", "Open tox:// URLs with uTox", WS_TABSTOP | WS_VISIBLE | WS_CHILD | BS_AUTOCHECKBOX, 15, 60, r.right - 20, 25, p->hwnd, (HMENU)0x8002, GetModuleHandle(NULL), NULL);
                     SendMessage(wnd, WM_SETFONT, font, 1);
                     SendMessage(wnd, BM_SETCHECK, BST_CHECKED, 0); enable[2] = 1;
-                    //printf("nigger %u\n", wnd);
                 }
             }
         }
@@ -754,7 +753,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR cmd, int n
     state = 0;
     MessageBox(NULL, "Update successful.", "uTox Updater", MB_OK);
 
-    printf("sucesss!\n");
+    printf("success!\n");
 
     END:
     if(!restart) {
