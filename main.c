@@ -59,6 +59,7 @@ static char request[] =
 #define MODE_INSTALLER 3
 
 PSTR STARTED_CMD;
+HINSTANCE STARTED_HINSTANCE;
 
 static char filename[32] = GET_NAME;
 static uint8_t recvbuf[0x10000];
@@ -550,9 +551,178 @@ void open_utox_and_exit(){
 }
 
 
+void show_installer(){
+	RUNNING_MODE = MODE_INSTALLER;
+	if (MessageBox(NULL, "\t\t\t\t\t\t\r\n\r\n\r\n\r\n\r\n\r\n", "uTox Updater", MB_OKCANCEL) != IDOK) {
+		open_utox_and_exit();
+	}
+
+	printf("options: %u %u %u\n", enable[0], enable[1], enable[2]);
+
+	RUNNING_MODE = MODE_NONE;
+
+	HRESULT hr;
+	_Bool quit = 0;
+	wchar_t selfpath[MAX_PATH];
+	GetModuleFileNameW(STARTED_HINSTANCE, selfpath, MAX_PATH);
+
+	hr = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
+	if (SUCCEEDED(hr)) {
+		IFileOpenDialog *pFileOpen;
+		hr = CoCreateInstance(&CLSID_FileOpenDialog, NULL, CLSCTX_ALL, &IID_IFileOpenDialog, (void*)&pFileOpen);
+		if (SUCCEEDED(hr)) {
+			/*wchar_t *sh_path;
+			hr = SHGetKnownFolderPath(&FOLDERID_ProgramFiles, 0, NULL, &sh_path);
+			if(SUCCEEDED(hr)) {
+			IShellItem *si;
+			hr = SHCreateItemFromParsingName(sh_path, NULL, &IID_IShellItem, (void**)&si);
+			if(SUCCEEDED(hr)) {
+			hr = pFileOpen->lpVtbl->SetDefaultFolder(pFileOpen, si);
+			si->lpVtbl->Release(si);
+			}
+
+			CoTaskMemFree(sh_path);
+			}*/
+
+			hr = pFileOpen->lpVtbl->SetOptions(pFileOpen, FOS_PICKFOLDERS);
+			hr = pFileOpen->lpVtbl->SetTitle(pFileOpen, L"Install Location");
+			hr = pFileOpen->lpVtbl->Show(pFileOpen, NULL);
+			if (SUCCEEDED(hr)) {
+				IShellItem *pItem;
+				hr = pFileOpen->lpVtbl->GetResult(pFileOpen, &pItem);
+				if (SUCCEEDED(hr)) {
+					PWSTR pszFilePath;
+					hr = pItem->lpVtbl->GetDisplayName(pItem, SIGDN_FILESYSPATH, &pszFilePath);
+
+					// Display the file name to the user.
+					if (SUCCEEDED(hr)) {
+						SetCurrentDirectoryW(pszFilePath);
+						CreateDirectory("Tox", NULL);
+						SetCurrentDirectory("Tox");
+						CoTaskMemFree(pszFilePath);
+						CopyFileW(selfpath, L"utox_runner.exe", 0);
+					}
+					pItem->lpVtbl->Release(pItem);
+				}
+			}
+			else {
+				quit = 1;
+			}
+			pFileOpen->lpVtbl->Release(pFileOpen);
+		}
+	}
+	else {
+		quit = 1;
+	}
+
+	if (quit) {
+		//CoUninitialize();
+		open_utox_and_exit();
+	}
+
+	if (!SUCCEEDED(hr)) {
+		wchar_t path[MAX_PATH];
+		BROWSEINFOW bi = {
+			.pszDisplayName = path,
+			.lpszTitle = L"Install Location",
+			.ulFlags = BIF_USENEWUI | BIF_NONEWFOLDERBUTTON,
+		};
+		LPITEMIDLIST lpItem = SHBrowseForFolderW(&bi);
+		if (!lpItem) {
+			open_utox_and_exit();
+		}
+
+		SHGetPathFromIDListW(lpItem, path);
+		SetCurrentDirectoryW(path);
+		CreateDirectory("Tox", NULL);
+		SetCurrentDirectory("Tox");
+		CopyFileW(selfpath, L"utox_runner.exe", 0);
+	}
+
+	char dir[MAX_PATH];
+	if (enable[0] || enable[1]) {
+		//start menu
+		IShellLink* psl;
+
+		// Get a pointer to the IShellLink interface. It is assumed that CoInitialize
+		// has already been called.
+		hr = CoCreateInstance(&CLSID_ShellLink, NULL, CLSCTX_INPROC_SERVER, &IID_IShellLink, (LPVOID*)&psl);
+		if (SUCCEEDED(hr)) {
+			IPersistFile* ppf;
+
+			// Set the path to the shortcut target and add the description.
+
+			GetCurrentDirectory(MAX_PATH, dir);
+			psl->lpVtbl->SetWorkingDirectory(psl, dir);
+			strcat(dir, "\\utox_runner.exe");
+			psl->lpVtbl->SetPath(psl, dir);
+			psl->lpVtbl->SetDescription(psl, "Tox");
+
+			// Query IShellLink for the IPersistFile interface, used for saving the
+			// shortcut in persistent storage.
+			hr = psl->lpVtbl->QueryInterface(psl, &IID_IPersistFile, (LPVOID*)&ppf);
+
+			if (SUCCEEDED(hr)) {
+				wchar_t wsz[MAX_PATH];
+				if (enable[0]) {
+					hr = SHGetFolderPathW(NULL, CSIDL_STARTMENU, NULL, 0, wsz);
+					if (SUCCEEDED(hr)) {
+						printf("%ls\n", wsz);
+						wcscat(wsz, L"\\Programs\\Tox.lnk");
+						hr = ppf->lpVtbl->Save(ppf, wsz, TRUE);
+					}
+				}
+
+				if (enable[1]) {
+					hr = SHGetFolderPathW(NULL, CSIDL_DESKTOPDIRECTORY, NULL, 0, wsz);
+					if (SUCCEEDED(hr)) {
+						wcscat(wsz, L"\\Tox.lnk");
+						hr = ppf->lpVtbl->Save(ppf, wsz, TRUE);
+					}
+				}
+
+				ppf->lpVtbl->Release(ppf);
+			}
+			psl->lpVtbl->Release(psl);
+		}
+	}
+
+	if (enable[2]) {
+		GetCurrentDirectory(MAX_PATH, dir);
+		strcat(dir, "\\utox_runner.exe");
+
+		char str[MAX_PATH];
+
+		HKEY key;
+		if (RegCreateKeyEx(HKEY_CLASSES_ROOT, "tox", 0, NULL, 0, KEY_ALL_ACCESS, NULL, &key, NULL) == ERROR_SUCCESS) {
+			printf("nice\n");
+			RegSetValueEx(key, NULL, 0, REG_SZ, (BYTE*)"URL:Tox Protocol", sizeof("URL:Tox Protocol"));
+			RegSetValueEx(key, "URL Protocol", 0, REG_SZ, (BYTE*)"", sizeof(""));
+
+			HKEY key2;
+			if (RegCreateKeyEx(key, "DefaultIcon", 0, NULL, 0, KEY_ALL_ACCESS, NULL, &key2, NULL) == ERROR_SUCCESS) {
+				int i = sprintf(str, "%s,101", dir) + 1;
+				RegSetValueEx(key2, NULL, 0, REG_SZ, (BYTE*)str, i);
+			}
+
+			if (RegCreateKeyEx(key, "shell", 0, NULL, 0, KEY_ALL_ACCESS, NULL, &key2, NULL) == ERROR_SUCCESS) {
+				if (RegCreateKeyEx(key2, "open", 0, NULL, 0, KEY_ALL_ACCESS, NULL, &key, NULL) == ERROR_SUCCESS) {
+					if (RegCreateKeyEx(key, "command", 0, NULL, 0, KEY_ALL_ACCESS, NULL, &key2, NULL) == ERROR_SUCCESS) {
+						int i = sprintf(str, "%s %%1", dir) + 1;
+						RegSetValueEx(key2, NULL, 0, REG_SZ, (BYTE*)str, i);
+					}
+				}
+			}
+		}
+	}
+
+	CoUninitialize();
+}
+
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR cmd, int nCmdShow)
 {
 	STARTED_CMD = cmd;
+	STARTED_HINSTANCE = hInstance;
 
     if(*cmd) {
         HMODULE hModule = GetModuleHandle(NULL);
@@ -615,169 +785,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR cmd, int n
 			open_utox_and_exit();
         }
     } else {
-		RUNNING_MODE = MODE_INSTALLER;
-        if(MessageBox(NULL, "\t\t\t\t\t\t\r\n\r\n\r\n\r\n\r\n\r\n", "uTox Updater", MB_OKCANCEL) != IDOK) {
-			open_utox_and_exit();
-        }
-
-        printf("options: %u %u %u\n", enable[0], enable[1], enable[2]);
-
-		RUNNING_MODE = MODE_NONE;
-
-        HRESULT hr;
-        _Bool quit = 0;
-        wchar_t selfpath[MAX_PATH];
-        GetModuleFileNameW(hInstance, selfpath, MAX_PATH);
-
-        hr = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
-        if(SUCCEEDED(hr)) {
-            IFileOpenDialog *pFileOpen;
-            hr = CoCreateInstance(&CLSID_FileOpenDialog, NULL, CLSCTX_ALL, &IID_IFileOpenDialog, (void*)&pFileOpen);
-            if(SUCCEEDED(hr)) {
-                /*wchar_t *sh_path;
-                hr = SHGetKnownFolderPath(&FOLDERID_ProgramFiles, 0, NULL, &sh_path);
-                if(SUCCEEDED(hr)) {
-                    IShellItem *si;
-                    hr = SHCreateItemFromParsingName(sh_path, NULL, &IID_IShellItem, (void**)&si);
-                    if(SUCCEEDED(hr)) {
-                        hr = pFileOpen->lpVtbl->SetDefaultFolder(pFileOpen, si);
-                        si->lpVtbl->Release(si);
-                    }
-
-                    CoTaskMemFree(sh_path);
-                }*/
-
-                hr = pFileOpen->lpVtbl->SetOptions(pFileOpen, FOS_PICKFOLDERS);
-                hr = pFileOpen->lpVtbl->SetTitle(pFileOpen, L"Install Location");
-                hr = pFileOpen->lpVtbl->Show(pFileOpen, NULL);
-                if(SUCCEEDED(hr)) {
-                    IShellItem *pItem;
-                    hr = pFileOpen->lpVtbl->GetResult(pFileOpen, &pItem);
-                    if(SUCCEEDED(hr)) {
-                        PWSTR pszFilePath;
-                        hr = pItem->lpVtbl->GetDisplayName(pItem, SIGDN_FILESYSPATH, &pszFilePath);
-
-                        // Display the file name to the user.
-                        if(SUCCEEDED(hr)) {
-                            SetCurrentDirectoryW(pszFilePath);
-                            CreateDirectory("Tox", NULL);
-                            SetCurrentDirectory("Tox");
-                            CoTaskMemFree(pszFilePath);
-                            CopyFileW(selfpath, L"utox_runner.exe", 0);
-                        }
-                        pItem->lpVtbl->Release(pItem);
-                    }
-                } else {
-                    quit = 1;
-                }
-                pFileOpen->lpVtbl->Release(pFileOpen);
-            }
-        } else {
-            quit = 1;
-        }
-
-        if(quit) {
-            //CoUninitialize();
-			open_utox_and_exit();
-        }
-
-        if(!SUCCEEDED(hr)) {
-            wchar_t path[MAX_PATH];
-            BROWSEINFOW bi = {
-                .pszDisplayName = path,
-                .lpszTitle = L"Install Location",
-                .ulFlags = BIF_USENEWUI | BIF_NONEWFOLDERBUTTON,
-            };
-            LPITEMIDLIST lpItem = SHBrowseForFolderW(&bi);
-            if(!lpItem) {
-				open_utox_and_exit();
-            }
-
-            SHGetPathFromIDListW(lpItem, path);
-            SetCurrentDirectoryW(path);
-            CreateDirectory("Tox", NULL);
-            SetCurrentDirectory("Tox");
-            CopyFileW(selfpath, L"utox_runner.exe", 0);
-        }
-
-        char dir[MAX_PATH];
-        if(enable[0] || enable[1]) {
-            //start menu
-            IShellLink* psl;
-
-            // Get a pointer to the IShellLink interface. It is assumed that CoInitialize
-            // has already been called.
-            hr = CoCreateInstance(&CLSID_ShellLink, NULL, CLSCTX_INPROC_SERVER, &IID_IShellLink, (LPVOID*)&psl);
-            if(SUCCEEDED(hr)) {
-                IPersistFile* ppf;
-
-                // Set the path to the shortcut target and add the description.
-
-                GetCurrentDirectory(MAX_PATH, dir);
-                psl->lpVtbl->SetWorkingDirectory(psl, dir);
-                strcat(dir, "\\utox_runner.exe");
-                psl->lpVtbl->SetPath(psl, dir);
-                psl->lpVtbl->SetDescription(psl, "Tox");
-
-                // Query IShellLink for the IPersistFile interface, used for saving the
-                // shortcut in persistent storage.
-                hr = psl->lpVtbl->QueryInterface(psl, &IID_IPersistFile, (LPVOID*)&ppf);
-
-                if(SUCCEEDED(hr)) {
-                    wchar_t wsz[MAX_PATH];
-                    if(enable[0]) {
-                        hr = SHGetFolderPathW(NULL, CSIDL_STARTMENU, NULL, 0, wsz);
-                        if(SUCCEEDED(hr)) {
-                            printf("%ls\n", wsz);
-                            wcscat(wsz, L"\\Programs\\Tox.lnk");
-                            hr = ppf->lpVtbl->Save(ppf, wsz, TRUE);
-                        }
-                    }
-
-                    if(enable[1]) {
-                        hr = SHGetFolderPathW(NULL, CSIDL_DESKTOPDIRECTORY, NULL, 0, wsz);
-                        if(SUCCEEDED(hr)) {
-                            wcscat(wsz, L"\\Tox.lnk");
-                            hr = ppf->lpVtbl->Save(ppf, wsz, TRUE);
-                        }
-                    }
-
-                    ppf->lpVtbl->Release(ppf);
-                }
-                psl->lpVtbl->Release(psl);
-            }
-        }
-
-        if(enable[2]) {
-            GetCurrentDirectory(MAX_PATH, dir);
-            strcat(dir, "\\utox_runner.exe");
-
-            char str[MAX_PATH];
-
-            HKEY key;
-            if(RegCreateKeyEx(HKEY_CLASSES_ROOT, "tox", 0, NULL, 0, KEY_ALL_ACCESS, NULL, &key, NULL) == ERROR_SUCCESS) {
-                printf("nice\n");
-                RegSetValueEx(key, NULL, 0, REG_SZ, (BYTE*)"URL:Tox Protocol", sizeof("URL:Tox Protocol"));
-                RegSetValueEx(key, "URL Protocol", 0, REG_SZ, (BYTE*)"", sizeof(""));
-
-                HKEY key2;
-                if(RegCreateKeyEx(key, "DefaultIcon", 0, NULL, 0, KEY_ALL_ACCESS, NULL, &key2, NULL) == ERROR_SUCCESS) {
-                    int i = sprintf(str, "%s,101", dir) + 1;
-                    RegSetValueEx(key2, NULL, 0, REG_SZ, (BYTE*)str, i);
-                }
-
-                if(RegCreateKeyEx(key, "shell", 0, NULL, 0, KEY_ALL_ACCESS, NULL, &key2, NULL) == ERROR_SUCCESS) {
-                    if(RegCreateKeyEx(key2, "open", 0, NULL, 0, KEY_ALL_ACCESS, NULL, &key, NULL) == ERROR_SUCCESS) {
-                        if(RegCreateKeyEx(key, "command", 0, NULL, 0, KEY_ALL_ACCESS, NULL, &key2, NULL) == ERROR_SUCCESS) {
-                            int i = sprintf(str, "%s %%1", dir) + 1;
-                            RegSetValueEx(key2, NULL, 0, REG_SZ, (BYTE*)str, i);
-                        }
-                    }
-                }
-            }
-        }
-
-        CoUninitialize();
+		show_installer();
     }
 
 	RUNNING_MODE = MODE_UPDATER;
