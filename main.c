@@ -32,10 +32,6 @@
 
 #define VERSION 2
 
-#define MODE_NONE 0
-#define MODE_DOWNLOADING 1
-#define MODE_UPDATER 2
-#define MODE_INSTALLER 3
 
 static const uint8_t public_key[crypto_sign_ed25519_PUBLICKEYBYTES] = {
     0x88, 0x90, 0x5F, 0x29, 0x46, 0xBE, 0x7C, 0x4B, 0xBD, 0xEC, 0xE4, 0x67, 0x14, 0x9C, 0x1D, 0x78,
@@ -56,6 +52,13 @@ static char request[] =
     "GET /" GET_NAME " HTTP/1.0\r\n"
     "Host: " HOST "\r\n"
     "\r\n";
+
+#define MODE_NONE 0
+#define MODE_DOWNLOADING 1
+#define MODE_UPDATER 2
+#define MODE_INSTALLER 3
+
+PSTR STARTED_CMD;
 
 static char filename[32] = GET_NAME;
 static uint8_t recvbuf[0x10000];
@@ -526,8 +529,31 @@ static LRESULT CALLBACK HookProc(INT nCode, WPARAM wParam, LPARAM lParam)
     return CallNextHookEx(hook, nCode, wParam, lParam);
 }
 
+void open_utox_and_exit(){
+	FILE *VERSION_FILE;
+	int len;
+
+	if (!restart) {
+		VERSION_FILE = fopen("version", "rb");
+		if (VERSION_FILE) {
+			len = fread(filename, 1, sizeof(filename) - 1, VERSION_FILE);
+			filename[len] = 0;
+			fclose(VERSION_FILE);
+		}
+
+		ShellExecute(NULL, "open", filename, STARTED_CMD, NULL, SW_SHOW);
+	}
+
+	free(addr);
+	UnhookWindowsHookEx(hook);
+	exit(0);
+}
+
+
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR cmd, int nCmdShow)
 {
+	STARTED_CMD = cmd;
+
     if(*cmd) {
         HMODULE hModule = GetModuleHandle(NULL);
         char path[MAX_PATH], *s;
@@ -577,7 +603,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR cmd, int n
 
 	RUNNING_MODE = MODE_DOWNLOADING;
     if(MessageBox(NULL, "Checking for new updates...", "uTox Updater", MB_OK)) {
-        goto END;
+		open_utox_and_exit();
     }
 
     VERSION_FILE = fopen("version", "rb");
@@ -586,12 +612,12 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR cmd, int n
 
 		RUNNING_MODE = MODE_NONE;
         if(MessageBox(NULL, "A new version of uTox is available.\nUpdate?", "uTox Updater", MB_YESNO | MB_ICONQUESTION) != IDYES) {
-            goto END;
+			open_utox_and_exit();
         }
     } else {
 		RUNNING_MODE = MODE_INSTALLER;
         if(MessageBox(NULL, "\t\t\t\t\t\t\r\n\r\n\r\n\r\n\r\n\r\n", "uTox Updater", MB_OKCANCEL) != IDOK) {
-            goto END;
+			open_utox_and_exit();
         }
 
         printf("options: %u %u %u\n", enable[0], enable[1], enable[2]);
@@ -652,7 +678,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR cmd, int n
 
         if(quit) {
             //CoUninitialize();
-            goto END;
+			open_utox_and_exit();
         }
 
         if(!SUCCEEDED(hr)) {
@@ -664,7 +690,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR cmd, int n
             };
             LPITEMIDLIST lpItem = SHBrowseForFolderW(&bi);
             if(!lpItem) {
-                goto END;
+				open_utox_and_exit();
             }
 
             SHGetPathFromIDListW(lpItem, path);
@@ -756,7 +782,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR cmd, int n
 
 	RUNNING_MODE = MODE_UPDATER;
     if(MessageBox(NULL, "Downloading update\t\t\t\t\t\t\r\n\r\n\r\n\r\n", "uTox Updater", MB_OK)) {
-        goto END;
+		open_utox_and_exit();
     }
 
 	RUNNING_MODE = MODE_NONE;
@@ -764,19 +790,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR cmd, int n
 
     printf("success!\n");
 
-    END:
-    if(!restart) {
-		VERSION_FILE = fopen("version", "rb");
-		if (VERSION_FILE) {
-			len = fread(filename, 1, sizeof(filename) - 1, VERSION_FILE);
-            filename[len] = 0;
-			fclose(VERSION_FILE);
-        }
+	open_utox_and_exit();
 
-        ShellExecute(NULL, "open", filename, cmd, NULL, SW_SHOW);
-    }
-
-    free(addr);
-    UnhookWindowsHookEx(hook);
     return 0;
 }
