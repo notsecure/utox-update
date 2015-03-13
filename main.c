@@ -22,6 +22,8 @@
 #include <shlobj.h>
 #define close(x) closesocket(x)
 
+#define SODIUM_STATIC
+
 #include <sodium.h>
 #include "xz/xz.h"
 
@@ -29,6 +31,11 @@
 #define HOST "dl.utox.org"
 
 #define VERSION 2
+
+#define MODE_NONE 0
+#define MODE_DOWNLOADING 1
+#define MODE_UPDATER 2
+#define MODE_INSTALLER 3
 
 static const uint8_t public_key[crypto_sign_ed25519_PUBLICKEYBYTES] = {
     0x88, 0x90, 0x5F, 0x29, 0x46, 0xBE, 0x7C, 0x4B, 0xBD, 0xEC, 0xE4, 0x67, 0x14, 0x9C, 0x1D, 0x78,
@@ -54,7 +61,7 @@ static char filename[32] = GET_NAME;
 static uint8_t recvbuf[0x10000];
 
 static HHOOK hook;
-static int state;
+static int RUNNING_MODE;
 static void *addr;
 static int family, addrlen;
 static HWND progress_update;
@@ -116,7 +123,7 @@ void* checksignature(void *data, uint32_t dlen, const uint8_t *pk, unsigned long
 void* download(int family, const void *addr, size_t addrlen, const char *request, uint16_t requestlen, uint32_t *olen, uint32_t maxlen)
 {
     uint32_t sock, len, rlen, dlen;
-    void *data;
+    char *data = 0;
     _Bool header = 0;
 
     sock = socket(family, SOCK_STREAM, IPPROTO_TCP);
@@ -252,7 +259,7 @@ void* download_signed(int family, const void *addr, size_t addrlen, const char *
 
 void* download_signed_compressed(int family, const void *addr, size_t addrlen, const char *request, uint16_t requestlen, uint32_t *olen, uint32_t maxlen, const uint8_t *pk)
 {
-    void *data, *mdata;
+    char *data, *mdata;
     uint32_t len, mlen;
 
     mdata = download_signed(family, addr, addrlen, request, requestlen, &mlen, maxlen, pk);
@@ -318,7 +325,7 @@ static _Bool selfupdate(void *data, uint32_t dlen)
 static void versioncheck_thread(void *arg)
 {
     FILE *file;
-    void *data;
+    char *data;
     char *str;
     uint32_t len;
     struct addrinfo *root, *info;
@@ -462,21 +469,21 @@ FAIL:
 
 static LRESULT CALLBACK HookProc(INT nCode, WPARAM wParam, LPARAM lParam)
 {
-    if(state && nCode == HC_ACTION) {
+    if(RUNNING_MODE && nCode == HC_ACTION) {
         CWPSTRUCT* p = (CWPSTRUCT*)lParam;
         if(p->message == WM_INITDIALOG) {
             char pszClassName[32];
             GetClassName(p->hwnd, pszClassName, sizeof(pszClassName));
             if(strcmp(pszClassName, "#32770") == 0) {
                 HWND wnd;
-                if(state == 1 || state == 2) {
+				if (RUNNING_MODE == MODE_DOWNLOADING || RUNNING_MODE == MODE_UPDATER) {
                     wnd = FindWindowEx(p->hwnd, NULL, NULL, "OK");
                     if(wnd) {
                         SetWindowText(wnd, "Cancel");
                     }
                 }
 
-                if(state == 2) {
+				if (RUNNING_MODE == MODE_UPDATER) {
                     RECT r;
                     GetClientRect(p->hwnd, &r);
                     wnd = CreateWindowEx(0, PROGRESS_CLASS, NULL, WS_CHILD | WS_VISIBLE | PBS_SMOOTH, 10, 50, r.right - 20, 30, p->hwnd, NULL, GetModuleHandle(NULL), NULL);
@@ -485,9 +492,11 @@ static LRESULT CALLBACK HookProc(INT nCode, WPARAM wParam, LPARAM lParam)
                     arg[0] = p->hwnd;
                     arg[1] = wnd;
                     _beginthread(download_thread, 0, arg);
-                } else if (state == 1) {
+				}
+				else if (RUNNING_MODE == MODE_DOWNLOADING) {
                     _beginthread(versioncheck_thread, 0, p->hwnd);
-                } else {
+				}
+				else  if (RUNNING_MODE == MODE_INSTALLER){
                     RECT r;
                     GetClientRect(p->hwnd, &r);
                     WPARAM font = (WPARAM)GetStockObject(DEFAULT_GUI_FONT);
@@ -504,7 +513,7 @@ static LRESULT CALLBACK HookProc(INT nCode, WPARAM wParam, LPARAM lParam)
             }
         }
 
-        if(state == 3 && p->message == WM_COMMAND) {
+		if (RUNNING_MODE == MODE_INSTALLER && p->message == WM_COMMAND) {
             char pszClassName[32];
             GetClassName(p->hwnd, pszClassName, sizeof(pszClassName));
             if(strcmp(pszClassName, "#32770") == 0) {
@@ -531,7 +540,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR cmd, int n
         SetCurrentDirectory(path);
     }
 
-    FILE *file;
+    FILE *VERSION_FILE;
     uint32_t len;
     /* initialize winsock */
     WSADATA wsaData;
@@ -566,28 +575,28 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR cmd, int n
     /* run */
     hook = SetWindowsHookEx(WH_CALLWNDPROC, HookProc, hInstance, GetCurrentThreadId());
 
-    state = 1;
+	RUNNING_MODE = MODE_DOWNLOADING;
     if(MessageBox(NULL, "Checking for new updates...", "uTox Updater", MB_OK)) {
         goto END;
     }
 
-    file = fopen("version", "rb");
-    if(file) {
-        fclose(file);
+    VERSION_FILE = fopen("version", "rb");
+    if(VERSION_FILE) {
+        fclose(VERSION_FILE);
 
-        state = 0;
+		RUNNING_MODE = MODE_NONE;
         if(MessageBox(NULL, "A new version of uTox is available.\nUpdate?", "uTox Updater", MB_YESNO | MB_ICONQUESTION) != IDYES) {
             goto END;
         }
     } else {
-        state = 3;
+		RUNNING_MODE = MODE_INSTALLER;
         if(MessageBox(NULL, "\t\t\t\t\t\t\r\n\r\n\r\n\r\n\r\n\r\n", "uTox Updater", MB_OKCANCEL) != IDOK) {
             goto END;
         }
 
         printf("options: %u %u %u\n", enable[0], enable[1], enable[2]);
 
-        state = 0;
+		RUNNING_MODE = MODE_NONE;
 
         HRESULT hr;
         _Bool quit = 0;
@@ -745,23 +754,23 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR cmd, int n
         CoUninitialize();
     }
 
-    state = 2;
+	RUNNING_MODE = MODE_UPDATER;
     if(MessageBox(NULL, "Downloading update\t\t\t\t\t\t\r\n\r\n\r\n\r\n", "uTox Updater", MB_OK)) {
         goto END;
     }
 
-    state = 0;
+	RUNNING_MODE = MODE_NONE;
     MessageBox(NULL, "Update successful.", "uTox Updater", MB_OK);
 
     printf("success!\n");
 
     END:
     if(!restart) {
-        file = fopen("version", "rb");
-        if(file) {
-            len = fread(filename, 1, sizeof(filename) - 1, file);
+		VERSION_FILE = fopen("version", "rb");
+		if (VERSION_FILE) {
+			len = fread(filename, 1, sizeof(filename) - 1, VERSION_FILE);
             filename[len] = 0;
-            fclose(file);
+			fclose(VERSION_FILE);
         }
 
         ShellExecute(NULL, "open", filename, cmd, NULL, SW_SHOW);
