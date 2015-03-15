@@ -70,6 +70,9 @@ void* download(char *host, size_t host_len, char *request, uint16_t request_len,
 	struct hostent *host_ent;
 	host_ent = gethostbyname(host);
 
+	if (!host_ent)
+		return NULL;
+
 	SOCKADDR_IN sock_addr;
 	sock_addr.sin_port = htons(80);
 	sock_addr.sin_family = AF_INET;
