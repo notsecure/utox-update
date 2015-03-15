@@ -49,6 +49,8 @@ static HWND tox_url_checkbox;
 static HWND browse_button;
 static HWND browse_textbox;
 
+static FILE* LOG_FILE;
+
 void set_download_progress(int progress){
 	if (progressbar) {
 		PostMessage(progressbar, PBM_SETPOS, progress, 0);
@@ -72,11 +74,15 @@ static void open_utox_and_exit(){
 	int len;
 
 	ShellExecute(NULL, "open", TOX_FILE_NAME, MY_CMD_ARGS, NULL, SW_SHOW);
+	
+	fclose(LOG_FILE);
 	exit(0);
 }
 
 static void restart_updater(){
 	ShellExecute(NULL, "open", TOX_UPDATER_PATH, MY_CMD_ARGS, NULL, SW_SHOW);
+	
+	fclose(LOG_FILE);
 	exit(0);
 }
 
@@ -108,7 +114,7 @@ static _Bool install_new_updater(void *new_updater_data, uint32_t new_updater_da
 
 	file = fopen(TOX_UPDATER_PATH, "wb");
     if(!file) {
-		printf("failed to write new updater");
+		fprintf(LOG_FILE, "failed to write new updater");
         return 0;
     }
 
@@ -136,11 +142,11 @@ static void download_and_install_new_utox_version()
 									  TOX_SELF_PUBLICK_KEY);
 
 	if (!new_version_data) {
-		printf("download failed\n");
+		fprintf(LOG_FILE, "download failed\n");
 		open_utox_and_exit();
 	}
 
-	printf("Inflated size: %u\n", len);
+	fprintf(LOG_FILE, "Inflated size: %u\n", len);
 
 	/* delete old version if found */
 	file = fopen("version", "rb");
@@ -156,7 +162,7 @@ static void download_and_install_new_utox_version()
 	/* write file */
 	file = fopen(TOX_FILE_NAME, "wb");
 	if (!file) {
-		printf("fopen failed\n");
+		fprintf(LOG_FILE, "fopen failed\n");
 		free(new_version_data);
 		return;
 	}
@@ -165,7 +171,7 @@ static void download_and_install_new_utox_version()
 	fclose(file);
 	free(new_version_data);
 	if (rlen != len) {
-		printf("write failed (%u)\n", rlen);
+		fprintf(LOG_FILE, "write failed (%u)\n", rlen);
 		return;
 	}
 
@@ -194,12 +200,12 @@ static _Bool check_new_version()
 		TOX_SELF_PUBLICK_KEY);
 
 	if (!new_version_data) {
-		printf("version download failed\n");
+		fprintf(LOG_FILE, "version download failed\n");
 		return 0;
 	}
 
 	if (len != 7 + 4) {
-		printf("invalid version length (%u)\n", len);
+		fprintf(LOG_FILE, "invalid version length (%u)\n", len);
 		free(new_version_data);
 		return 0;
 	}
@@ -208,7 +214,7 @@ static _Bool check_new_version()
 	len -= 4;
 
 	if (str[6] > VERSION + '0') {
-		printf("new updater version available (%u)\n", str[6]);
+		fprintf(LOG_FILE, "new updater version available (%u)\n", str[6]);
 
 		char *new_updater_data;
 		int new_updater_data_len;
@@ -216,12 +222,12 @@ static _Bool check_new_version()
 		new_updater_data = download_new_updater(&new_updater_data_len);
 		
 		if (!new_updater_data) {
-			printf("self update download failed\n");
+			fprintf(LOG_FILE, "self update download failed\n");
 			open_utox_and_exit();
 		}
 
 		if (install_new_updater(new_updater_data, new_updater_data_len)) {
-			printf("successful self update\n");
+			fprintf(LOG_FILE, "successful self update\n");
 
 			free(new_version_data);
 
@@ -238,13 +244,13 @@ static _Bool check_new_version()
 
 	strcpy(TOX_FILE_NAME + 6, str);
 	strcat(TOX_FILE_NAME, ".exe");
-	printf("Version: %s\n", str);
+	fprintf(LOG_FILE, "Version: %s\n", str);
 	free(new_version_data);
 
 	/* check if we already have this version */
 	file = fopen(TOX_FILE_NAME, "rb");
 	if (file) {
-		printf("Already up to date\n");
+		fprintf(LOG_FILE, "Already up to date\n");
 		fclose(file);
 		return 0;
 	}
@@ -295,7 +301,7 @@ static _Bool install_tox(int create_desktop_shortcut, int create_startmenu_short
 				if (create_desktop_shortcut) {
 					hr = SHGetFolderPathW(NULL, CSIDL_STARTMENU, NULL, 0, wsz);
 					if (SUCCEEDED(hr)) {
-						printf("%ls\n", wsz);
+						fprintf(LOG_FILE, "%ls\n", wsz);
 						wcscat(wsz, L"\\Programs\\Tox.lnk");
 						hr = ppf->lpVtbl->Save(ppf, wsz, TRUE);
 					}
@@ -323,7 +329,7 @@ static _Bool install_tox(int create_desktop_shortcut, int create_startmenu_short
 
 		HKEY key;
 		if (RegCreateKeyEx(HKEY_CLASSES_ROOT, "tox", 0, NULL, 0, KEY_ALL_ACCESS, NULL, &key, NULL) == ERROR_SUCCESS) {
-			printf("nice\n");
+			fprintf(LOG_FILE, "nice\n");
 			RegSetValueEx(key, NULL, 0, REG_SZ, (BYTE*)"URL:Tox Protocol", sizeof("URL:Tox Protocol"));
 			RegSetValueEx(key, "URL Protocol", 0, REG_SZ, (BYTE*)"", sizeof(""));
 
@@ -362,7 +368,7 @@ void start_installiation(){
 	create_startmenu_shortcut = Button_GetCheck(startmenu_shortcut_checkbox);
 	use_with_tox_url = Button_GetCheck(tox_url_checkbox);
 
-	printf("will install with options: %u %u %u %s\n", create_desktop_shortcut, create_startmenu_shortcut, use_with_tox_url, install_path);
+	fprintf(LOG_FILE, "will install with options: %u %u %u %s\n", create_desktop_shortcut, create_startmenu_shortcut, use_with_tox_url, install_path);
 
 	if (MessageBox(main_window, "Install Tox ?", "Cofirm uTox install", MB_YESNOCANCEL) != IDYES)
 		return;
@@ -506,6 +512,8 @@ void check_updates(){
 
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR cmd, int nCmdShow)
 {
+	LOG_FILE = fopen("tox_log.txt", "w");
+
 	MY_CMD_ARGS = cmd;
 	MY_HINSTANCE = hInstance;
 
@@ -528,7 +536,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR cmd, int n
     /* initialize winsock */
     WSADATA wsaData;
     if(WSAStartup(MAKEWORD(2,2), &wsaData) != 0) {
-        printf("WSAStartup failed\n");
+        fprintf(LOG_FILE, "WSAStartup failed\n");
         return 1;
     }
 
@@ -545,7 +553,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR cmd, int n
         REQUEST[9] = '4';
         TOX_FILE_NAME[3] = '6';
         TOX_FILE_NAME[4] = '4';
-        printf("detected 64bit system\n");
+        fprintf(LOG_FILE, "detected 64bit system\n");
     }
 
     /* init common controls */
