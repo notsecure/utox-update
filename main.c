@@ -48,6 +48,7 @@ static HWND tox_url_checkbox;
 
 static HWND browse_button;
 static HWND browse_textbox;
+static HWND status_label;
 
 static FILE* LOG_FILE;
 
@@ -55,6 +56,10 @@ void set_download_progress(int progress){
 	if (progressbar) {
 		PostMessage(progressbar, PBM_SETPOS, progress, 0);
 	}
+}
+
+void set_current_status(char *status){
+	SetWindowText(status_label, status);
 }
 
 void init_tox_file_name(){
@@ -183,7 +188,7 @@ static void download_and_install_new_utox_version()
 	}
 }
 
-static _Bool check_new_version()
+static int check_new_version()
 {
 	FILE *file;
 	char *new_version_data;
@@ -201,13 +206,13 @@ static _Bool check_new_version()
 
 	if (!new_version_data) {
 		fprintf(LOG_FILE, "version download failed\n");
-		return 0;
+		return -1;
 	}
 
 	if (len != 7 + 4) {
 		fprintf(LOG_FILE, "invalid version length (%u)\n", len);
 		free(new_version_data);
-		return 0;
+		return -1;
 	}
 
 	str = new_version_data + 4;
@@ -270,6 +275,9 @@ static _Bool install_tox(int create_desktop_shortcut, int create_startmenu_short
 	SetCurrentDirectory("Tox");
 	CopyFileW(selfpath, L"utox_runner.exe", 0);
 	
+
+	set_current_status("downloading and installing tox");
+
 	download_and_install_new_utox_version();
 
 	HRESULT hr;
@@ -354,6 +362,7 @@ static _Bool install_tox(int create_desktop_shortcut, int create_startmenu_short
 }
 
 void start_installiation(){
+
 	_Bool create_desktop_shortcut, create_startmenu_shortcut, use_with_tox_url;
 
 	wchar_t install_path[MAX_PATH];
@@ -370,15 +379,20 @@ void start_installiation(){
 
 	fprintf(LOG_FILE, "will install with options: %u %u %u %s\n", create_desktop_shortcut, create_startmenu_shortcut, use_with_tox_url, install_path);
 
-	if (MessageBox(main_window, "Install Tox ?", "Cofirm uTox install", MB_YESNOCANCEL) != IDYES)
+	if (MessageBox(main_window, "Confirm installing Tox on your computer ?", "", MB_YESNOCANCEL) != IDYES)
 		return;
 
 	if (install_tox(create_desktop_shortcut, create_startmenu_shortcut, use_with_tox_url, install_path, install_path_len)){
+		set_current_status("Installiation completed");
+
 		MessageBox(main_window, "Installed Success", "uTox Install", MB_OK);
 		open_utox_and_exit();
 	}
 	else{
+		set_current_status("Error during installiation");
+
 		MessageBox(main_window, "Installiation Failed, Please send the log file to the developers", "uTox Install", MB_OK);
+		exit(0);
 	}
 }
 
@@ -498,9 +512,21 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 }
 
 void check_updates(){
-	_Bool new_version = check_new_version();
+	set_current_status("fetching new version data..");
+
+	int new_version = check_new_version();
+
+	if (new_version == -1){
+		MessageBox(main_window, "Error fetching latest version data, Please check your internet connection. \n\n Exiting now...", "Error", MB_OK);
+		exit(0);
+	}
+
+	set_current_status("version data fetched successfully.");
 
 	if (is_tox_installed){
+
+		set_download_progress(0);
+		set_current_status("Found new version");
 
 		if (new_version && MessageBox(NULL, "A new version of uTox is available.\nUpdate?", "uTox Updater", MB_YESNO | MB_ICONQUESTION) == IDYES) {
 			download_and_install_new_utox_version();
@@ -585,6 +611,10 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR cmd, int n
 	progressbar = CreateWindowEx(0, PROGRESS_CLASS, NULL, WS_CHILD | WS_VISIBLE | PBS_SMOOTH, 10, 100, r.right - 20, 30, main_window, NULL, hInstance, NULL);
 
 	WPARAM font = (WPARAM)GetStockObject(DEFAULT_GUI_FONT);
+	
+	status_label = CreateWindowEx(0, "Static", "", WS_TABSTOP | WS_VISIBLE | WS_CHILD, 200, 135, 200, 20, main_window, NULL, hInstance, NULL);
+	SendMessage(status_label, WM_SETFONT, font, 1);
+	SendMessage(status_label, BM_SETCHECK, BST_CHECKED, 0);
 
 	cancel_button = CreateWindowEx(0, "BUTTON", "Cancel", WS_TABSTOP | WS_VISIBLE | WS_CHILD, 0, 150, 80, 20, main_window, NULL, hInstance, NULL);
 	SendMessage(cancel_button, WM_SETFONT, font, 0);
