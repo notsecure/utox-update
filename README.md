@@ -18,9 +18,9 @@ downloads signed updates from dl.utox.org
 7. Run the file
 
 #Building
-
-    windres icon.rc -O coff -o icon.res
-    gcc icon.res main.c utils.c xz/*.c -lcomctl32 -luuid -lole32 -lgdi32 -lws2_32 -lsodium -s -Ofast
+* requires mingw-w64
+* on windows use build.bat
+* on linux use build.sh
 
 #Todo
 
