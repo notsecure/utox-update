@@ -25,7 +25,7 @@ static int TOX_FILE_NAME_LEN;
 static char TOX_UPDATER_PATH[MAX_PATH];
 static uint32_t TOX_UPDATER_PATH_LEN;
 
-_Bool is_tox_installed;
+static _Bool is_tox_installed;
 
 // Called arguments
 
@@ -62,7 +62,7 @@ void set_current_status(char *status){
 	SetWindowText(status_label, status);
 }
 
-void init_tox_file_name(){
+static void init_tox_file_name(){
 	FILE *version_file = fopen("version", "rb");
 	
 	if (version_file) {
@@ -361,7 +361,7 @@ static _Bool install_tox(int create_desktop_shortcut, int create_startmenu_short
 	return 1;
 }
 
-void start_installiation(){
+static void start_installiation(){
 
 	_Bool create_desktop_shortcut, create_startmenu_shortcut, use_with_tox_url;
 
@@ -396,7 +396,7 @@ void start_installiation(){
 	}
 }
 
-void create_installer_ui(){
+static void create_installer_ui(){
 	RECT r;
 	GetClientRect(main_window, &r);
 	
@@ -426,7 +426,7 @@ void create_installer_ui(){
 	SendMessage(browse_button, BM_SETCHECK, BST_CHECKED, 0);
 }
 
-void browse_for_install_folder(){
+static void browse_for_install_folder(){
 	HRESULT hr = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
 
 	IFileOpenDialog *pFileOpen;
@@ -471,7 +471,7 @@ void browse_for_install_folder(){
 		SetWindowTextW(browse_textbox, path);
 	}
 }
-LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
+static LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 {
 
 	switch (message)
@@ -511,7 +511,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 
 }
 
-void check_updates(){
+static void check_updates(){
 	set_current_status("fetching new version data..");
 
 	int new_version = check_new_version();
