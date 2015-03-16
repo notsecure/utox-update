@@ -23,6 +23,7 @@ downloads signed updates from dl.utox.org
 
 #Building
 * requires mingw-w64
+* requires libsodium 1.0.0 ([github](https://github.com/jedisct1/libsodium), [binary releases](https://download.libsodium.org/libsodium/releases/))
 * on windows use build.bat
 * on linux use build.sh
 
