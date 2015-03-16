@@ -17,6 +17,7 @@
 
 #include "utils.h"
 #include "consts.h"
+#include "resource.h"
 
 #define TOX_FILE_NAME_MAX_LEN 32
 static char TOX_FILE_NAME[TOX_FILE_NAME_MAX_LEN] = GET_NAME;
@@ -36,18 +37,6 @@ HINSTANCE MY_HINSTANCE;
 
 static HWND main_window;
 static HWND progressbar;
-static HWND cancel_button;
-static HWND install_button;
-
-// Installer UI
-static HWND cancel_button;
-static HWND install_button;
-static HWND desktop_shortcut_checkbox;
-static HWND startmenu_shortcut_checkbox;
-static HWND tox_url_checkbox;
-
-static HWND browse_button;
-static HWND browse_textbox;
 static HWND status_label;
 
 static FILE* LOG_FILE;
@@ -362,6 +351,10 @@ static _Bool install_tox(int create_desktop_shortcut, int create_startmenu_short
 }
 
 static void start_installiation(){
+	HWND desktop_shortcut_checkbox = GetDlgItem(main_window, ID_DESKTOP_SHORTCUT_CHECKBOX);
+	HWND startmenu_shortcut_checkbox = GetDlgItem(main_window, ID_STARTMENU_SHORTCUT_CHECKBOX);
+	HWND tox_url_checkbox = GetDlgItem(main_window, ID_TOX_URL_CHECKBOX);
+	HWND browse_textbox = GetDlgItem(main_window, ID_BROWSE_TEXTBOX);
 
 	_Bool create_desktop_shortcut, create_startmenu_shortcut, use_with_tox_url;
 
@@ -396,37 +389,9 @@ static void start_installiation(){
 	}
 }
 
-static void create_installer_ui(){
-	RECT r;
-	GetClientRect(main_window, &r);
-	
-	WPARAM font = (WPARAM)GetStockObject(DEFAULT_GUI_FONT);
-
-	install_button = CreateWindowEx(0, "BUTTON", "Install", WS_TABSTOP | WS_VISIBLE | WS_CHILD, 100, 150, 80, 20, main_window, NULL, MY_HINSTANCE, NULL);
-	SendMessage(install_button, WM_SETFONT, font, 0);
-
-	desktop_shortcut_checkbox = CreateWindowEx(0, "Button", "Create Start Menu shortcut", WS_TABSTOP | WS_VISIBLE | WS_CHILD | BS_AUTOCHECKBOX, 15, 10, r.right - 20, 25, main_window, NULL, MY_HINSTANCE, NULL);
-	SendMessage(desktop_shortcut_checkbox, WM_SETFONT, font, 0);
-	SendMessage(desktop_shortcut_checkbox, BM_SETCHECK, BST_CHECKED, 0);
-
-	startmenu_shortcut_checkbox = CreateWindowEx(0, "Button", "Create Desktop shortcut", WS_TABSTOP | WS_VISIBLE | WS_CHILD | BS_AUTOCHECKBOX, 15, 35, r.right - 20, 25, main_window, NULL, MY_HINSTANCE, NULL);
-	SendMessage(startmenu_shortcut_checkbox, WM_SETFONT, font, 1);
-	SendMessage(startmenu_shortcut_checkbox, BM_SETCHECK, BST_CHECKED, 0);
-
-	tox_url_checkbox = CreateWindowEx(0, "Button", "Open tox:// URLs with uTox", WS_TABSTOP | WS_VISIBLE | WS_CHILD | BS_AUTOCHECKBOX, 15, 60, r.right - 20, 25, main_window, NULL, MY_HINSTANCE, NULL);
-	SendMessage(tox_url_checkbox, WM_SETFONT, font, 1);
-	SendMessage(tox_url_checkbox, BM_SETCHECK, BST_CHECKED, 0);
-
-	browse_textbox = CreateWindowEx(WS_EX_CLIENTEDGE, "Edit", "", WS_TABSTOP | WS_VISIBLE | WS_CHILD, 15, 200, r.right - 100, 25, main_window, NULL, MY_HINSTANCE, NULL);
-	SendMessage(browse_textbox, WM_SETFONT, font, 1);
-	SendMessage(browse_textbox, BM_SETCHECK, BST_CHECKED, 0);
-
-	browse_button = CreateWindowEx(0, "Button", "Browse", WS_TABSTOP | WS_VISIBLE | WS_CHILD, r.right - 80, 200, 80, 25, main_window, NULL, MY_HINSTANCE, NULL);
-	SendMessage(browse_button, WM_SETFONT, font, 1);
-	SendMessage(browse_button, BM_SETCHECK, BST_CHECKED, 0);
-}
-
 static void browse_for_install_folder(){
+	HWND browse_textbox = GetDlgItem(main_window, ID_BROWSE_TEXTBOX);
+
 	HRESULT hr = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
 
 	IFileOpenDialog *pFileOpen;
@@ -445,6 +410,7 @@ static void browse_for_install_folder(){
 				hr = pItem->lpVtbl->GetDisplayName(pItem, SIGDN_FILESYSPATH, &pszFilePath);
 
 				if (SUCCEEDED(hr)) {
+
 					SetWindowTextW(browse_textbox, pszFilePath);
 					CoTaskMemFree(pszFilePath);
 				}
@@ -471,45 +437,6 @@ static void browse_for_install_folder(){
 		SetWindowTextW(browse_textbox, path);
 	}
 }
-static LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
-{
-
-	switch (message)
-	{
-	case WM_CLOSE:
-		PostQuitMessage(0);
-		break;
-
-	case WM_COMMAND:{
-		if (HIWORD(wParam) == BN_CLICKED){
-			int id = LOWORD(wParam);
-			HWND control_hwnd = (HWND) lParam;
-
-			if (control_hwnd == cancel_button){
-				if (MessageBox(main_window, "Are you sure you want to exit", "uTox", MB_YESNOCANCEL) == IDYES){
-					if (is_tox_installed){
-						open_utox_and_exit();
-					}
-					else{
-						exit(0);
-					}
-				}
-			}
-			else if (control_hwnd == install_button){
-				_beginthread(start_installiation, 0, 0);
-			}
-			else if (control_hwnd == browse_button){
-				browse_for_install_folder();
-			}
-		}
-		break;
-	}
-	default:
-		return DefWindowProc(hWnd, message, wParam, lParam);
-	}
-	return 0;
-
-}
 
 static void check_updates(){
 	set_current_status("fetching new version data..");
@@ -535,6 +462,54 @@ static void check_updates(){
 		open_utox_and_exit();
 	}
 }
+
+INT_PTR CALLBACK MainDialogProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam)
+{
+	UNREFERENCED_PARAMETER(lParam);
+
+	switch (message)
+	{
+		case WM_INITDIALOG:
+			return (INT_PTR)TRUE;
+		case WM_CLOSE:
+			PostQuitMessage(0);
+			break;
+
+		case WM_COMMAND:{
+			if (HIWORD(wParam) == BN_CLICKED){
+				int id = LOWORD(wParam);
+				HWND control_hwnd = (HWND)lParam;
+
+				switch (id){
+					case ID_CANCEL_BUTTON:
+						if (MessageBox(main_window, "Are you sure you want to exit", "uTox", MB_YESNOCANCEL) == IDYES){
+							if (is_tox_installed){
+								open_utox_and_exit();
+							}
+							else{
+								exit(0);
+							}
+						}
+						break;
+
+					case ID_INSTALL_BUTTON:
+						_beginthread(start_installiation, 0, 0);
+
+						break;
+
+					case ID_BROWSE_BUTTON:
+						browse_for_install_folder();
+
+						break;
+				}
+			}
+			break;
+		}
+	}
+
+	return (INT_PTR)FALSE;
+}
+
 
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR cmd, int nCmdShow)
 {
@@ -589,38 +564,26 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR cmd, int n
 	InitCtrlEx.dwICC = ICC_PROGRESS_CLASS;
 	InitCommonControlsEx(&InitCtrlEx);
 
-	WNDCLASS wc = { 0 };
-	wc.lpfnWndProc = WndProc;
-	wc.hInstance = MY_HINSTANCE;
-	wc.hbrBackground = (HBRUSH)(COLOR_WINDOW);
-	wc.lpszClassName = "ToxWindow";
-	if (!RegisterClass(&wc))
-		return 1;
+	main_window = CreateDialog(MY_HINSTANCE, MAKEINTRESOURCE(IDD_MAIN_DIALOG), NULL, MainDialogProc);
 
-	int width = 600;
-	int height = 300;
-	int x = (GetSystemMetrics(SM_CXSCREEN) - width) / 2;
-	int y = (GetSystemMetrics(SM_CYSCREEN) - height) / 2;
-
-	main_window = CreateWindowEx(WS_EX_APPWINDOW, "ToxWindow", "uTox Updater", WS_OVERLAPPEDWINDOW,
-		x, y, width, height, 0, 0, MY_HINSTANCE, NULL);
-
-	RECT r;
-	GetClientRect(main_window, &r);
-
-	progressbar = CreateWindowEx(0, PROGRESS_CLASS, NULL, WS_CHILD | WS_VISIBLE | PBS_SMOOTH, 10, 100, r.right - 20, 30, main_window, NULL, hInstance, NULL);
-
-	WPARAM font = (WPARAM)GetStockObject(DEFAULT_GUI_FONT);
+	if (!main_window){
+		fprintf(LOG_FILE, "error creating main window");
+		exit(0);
+	}
 	
-	status_label = CreateWindowEx(0, "Static", "", WS_TABSTOP | WS_VISIBLE | WS_CHILD, 200, 135, 200, 20, main_window, NULL, hInstance, NULL);
-	SendMessage(status_label, WM_SETFONT, font, 1);
-	SendMessage(status_label, BM_SETCHECK, BST_CHECKED, 0);
-
-	cancel_button = CreateWindowEx(0, "BUTTON", "Cancel", WS_TABSTOP | WS_VISIBLE | WS_CHILD, 0, 150, 80, 20, main_window, NULL, hInstance, NULL);
-	SendMessage(cancel_button, WM_SETFONT, font, 0);
+	progressbar = GetDlgItem(main_window, ID_PROGRESSBAR);
+	status_label = GetDlgItem(main_window, IDC_STATUS_LABEL);
 
 	if (!is_tox_installed){
-		create_installer_ui();
+		// show installer controls
+		ShowWindow(GetDlgItem(main_window, ID_INSTALL_BUTTON), SW_SHOW);
+		ShowWindow(GetDlgItem(main_window, ID_DESKTOP_SHORTCUT_CHECKBOX), SW_SHOW);
+		ShowWindow(GetDlgItem(main_window, ID_STARTMENU_SHORTCUT_CHECKBOX), SW_SHOW);
+		ShowWindow(GetDlgItem(main_window, ID_TOX_URL_CHECKBOX), SW_SHOW);
+
+		ShowWindow(GetDlgItem(main_window, ID_BROWSE_TEXTBOX), SW_SHOW);
+		ShowWindow(GetDlgItem(main_window, ID_BROWSE_BUTTON), SW_SHOW);
+		ShowWindow(GetDlgItem(main_window, IDC_INSTALL_FOLDER_LABEL), SW_SHOW);
 	}
 	
 	ShowWindow(main_window, SW_SHOW);

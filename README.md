@@ -17,6 +17,10 @@ downloads signed updates from dl.utox.org
 
 7. Run the file
 
+#Adding and modifiying resources
+* The resource.rc file contains the main dialog definition, default icon, and mainfest that enables visual styles.
+* Use [ResEdit](www.resedit.net) to open and modify it.
+
 #Building
 * requires mingw-w64
 * on windows use build.bat
