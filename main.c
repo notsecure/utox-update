@@ -12,7 +12,7 @@
 
 #include <winsock2.h>
 #include <windows.h>
-#include <Windowsx.h>
+#include <windowsx.h>
 #include <shlobj.h>
 
 #include "utils.h"
