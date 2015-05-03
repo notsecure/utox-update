@@ -63,10 +63,15 @@ static void init_tox_file_name() {
     }
 }
 
+#define UTOX_UPDATER_PARAM " --no-updater"
+
 static void open_utox_and_exit() {
     FILE *VERSION_FILE;
     int len;
 
+    char str[strlen(MY_CMD_ARGS) + sizeof(UTOX_UPDATER_PARAM)];
+    strcpy(str, MY_CMD_ARGS);
+    strcat(str, UTOX_UPDATER_PARAM);
     ShellExecute(NULL, "open", TOX_FILE_NAME, MY_CMD_ARGS, NULL, SW_SHOW);
 
     fclose(LOG_FILE);
@@ -259,11 +264,9 @@ static _Bool install_tox(int create_desktop_shortcut, int create_startmenu_short
     wchar_t selfpath[MAX_PATH];
     GetModuleFileNameW(MY_HINSTANCE, selfpath, MAX_PATH);
 
+    SHCreateDirectoryExW(NULL, install_path, NULL);
     SetCurrentDirectoryW(install_path);
-    CreateDirectory("Tox", NULL);
-    SetCurrentDirectory("Tox");
     CopyFileW(selfpath, L"utox_runner.exe", 0);
-
 
     set_current_status("downloading and installing tox");
 
@@ -370,7 +373,7 @@ static void start_installiation() {
     create_startmenu_shortcut = Button_GetCheck(startmenu_shortcut_checkbox);
     use_with_tox_url = Button_GetCheck(tox_url_checkbox);
 
-    fprintf(LOG_FILE, "will install with options: %u %u %u %s\n", create_desktop_shortcut, create_startmenu_shortcut, use_with_tox_url, install_path);
+    fprintf(LOG_FILE, "will install with options: %u %u %u %ls\n", create_desktop_shortcut, create_startmenu_shortcut, use_with_tox_url, install_path);
 
     if (MessageBox(main_window, "Confirm installing Tox on your computer ?", "", MB_YESNOCANCEL) != IDYES)
         return;
@@ -389,9 +392,20 @@ static void start_installiation() {
     }
 }
 
-static void browse_for_install_folder() {
+static void set_utox_path(wchar_t *path)
+{
     HWND browse_textbox = GetDlgItem(main_window, ID_BROWSE_TEXTBOX);
 
+    unsigned int str_len = wcslen(path);
+    if (str_len != 0) {
+        wchar_t file_path[str_len + sizeof(L"\\Tox")];
+        memcpy(file_path, path, str_len * sizeof(wchar_t));
+        memcpy(file_path + str_len, L"\\Tox", sizeof(L"\\Tox"));
+        SetWindowTextW(browse_textbox, file_path);
+    }
+}
+
+static void browse_for_install_folder() {
     HRESULT hr = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
 
     IFileOpenDialog *pFileOpen;
@@ -410,8 +424,7 @@ static void browse_for_install_folder() {
                 hr = pItem->lpVtbl->GetDisplayName(pItem, SIGDN_FILESYSPATH, &pszFilePath);
 
                 if (SUCCEEDED(hr)) {
-
-                    SetWindowTextW(browse_textbox, pszFilePath);
+                    set_utox_path(pszFilePath);
                     CoTaskMemFree(pszFilePath);
                 }
                 pItem->lpVtbl->Release(pItem);
@@ -430,11 +443,11 @@ static void browse_for_install_folder() {
         };
         LPITEMIDLIST lpItem = SHBrowseForFolderW(&bi);
         if (!lpItem) {
-            open_utox_and_exit();
+            return;
         }
 
         SHGetPathFromIDListW(lpItem, path);
-        SetWindowTextW(browse_textbox, path);
+        set_utox_path(path);
     }
 }
 
@@ -577,9 +590,21 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR cmd, int n
     if (!is_tox_installed) {
         // show installer controls
         ShowWindow(GetDlgItem(main_window, ID_INSTALL_BUTTON), SW_SHOW);
-        ShowWindow(GetDlgItem(main_window, ID_DESKTOP_SHORTCUT_CHECKBOX), SW_SHOW);
-        ShowWindow(GetDlgItem(main_window, ID_STARTMENU_SHORTCUT_CHECKBOX), SW_SHOW);
+
+        HWND desktop_shortcut_checkbox = GetDlgItem(main_window, ID_DESKTOP_SHORTCUT_CHECKBOX);
+        Button_SetCheck(desktop_shortcut_checkbox, 1);
+        ShowWindow(desktop_shortcut_checkbox, SW_SHOW);
+
+        HWND startmenu_shortcut_checkbox = GetDlgItem(main_window, ID_STARTMENU_SHORTCUT_CHECKBOX);
+        Button_SetCheck(startmenu_shortcut_checkbox, 1);
+        ShowWindow(startmenu_shortcut_checkbox, SW_SHOW);
+
         ShowWindow(GetDlgItem(main_window, ID_TOX_URL_CHECKBOX), SW_SHOW);
+
+        wchar_t appdatalocal_path[MAX_PATH] = {0};
+        if (SHGetFolderPathW(NULL, CSIDL_LOCAL_APPDATA, NULL, 0, appdatalocal_path) == S_OK) {
+            set_utox_path(appdatalocal_path);
+        }
 
         ShowWindow(GetDlgItem(main_window, ID_BROWSE_TEXTBOX), SW_SHOW);
         ShowWindow(GetDlgItem(main_window, ID_BROWSE_BUTTON), SW_SHOW);
