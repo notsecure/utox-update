@@ -41,482 +41,482 @@ static HWND status_label;
 
 static FILE* LOG_FILE;
 
-void set_download_progress(int progress){
-	if (progressbar) {
-		PostMessage(progressbar, PBM_SETPOS, progress, 0);
-	}
+void set_download_progress(int progress) {
+    if (progressbar) {
+        PostMessage(progressbar, PBM_SETPOS, progress, 0);
+    }
 }
 
-void set_current_status(char *status){
-	SetWindowText(status_label, status);
+void set_current_status(char *status) {
+    SetWindowText(status_label, status);
 }
 
-static void init_tox_file_name(){
-	FILE *version_file = fopen("version", "rb");
-	
-	if (version_file) {
-		TOX_FILE_NAME_LEN = fread(TOX_FILE_NAME, 1, sizeof(TOX_FILE_NAME) - 1, version_file);
-		TOX_FILE_NAME[TOX_FILE_NAME_LEN] = 0;
-		fclose(version_file);
+static void init_tox_file_name() {
+    FILE *version_file = fopen("version", "rb");
 
-		is_tox_installed = 1;
-	}
+    if (version_file) {
+        TOX_FILE_NAME_LEN = fread(TOX_FILE_NAME, 1, sizeof(TOX_FILE_NAME) - 1, version_file);
+        TOX_FILE_NAME[TOX_FILE_NAME_LEN] = 0;
+        fclose(version_file);
+
+        is_tox_installed = 1;
+    }
 }
 
-static void open_utox_and_exit(){
-	FILE *VERSION_FILE;
-	int len;
+static void open_utox_and_exit() {
+    FILE *VERSION_FILE;
+    int len;
 
-	ShellExecute(NULL, "open", TOX_FILE_NAME, MY_CMD_ARGS, NULL, SW_SHOW);
-	
-	fclose(LOG_FILE);
-	exit(0);
+    ShellExecute(NULL, "open", TOX_FILE_NAME, MY_CMD_ARGS, NULL, SW_SHOW);
+
+    fclose(LOG_FILE);
+    exit(0);
 }
 
-static void restart_updater(){
-	ShellExecute(NULL, "open", TOX_UPDATER_PATH, MY_CMD_ARGS, NULL, SW_SHOW);
-	
-	fclose(LOG_FILE);
-	exit(0);
+static void restart_updater() {
+    ShellExecute(NULL, "open", TOX_UPDATER_PATH, MY_CMD_ARGS, NULL, SW_SHOW);
+
+    fclose(LOG_FILE);
+    exit(0);
 }
 
-static char* download_new_updater(int *new_updater_len){
-	char *new_updater;
+static char* download_new_updater(int *new_updater_len) {
+    char *new_updater;
 
-	memcpy(REQUEST + 8, "selfpdate", sizeof("selfpdate") - 1);
+    memcpy(REQUEST + 8, "selfpdate", sizeof("selfpdate") - 1);
 
-	new_updater = download_signed_compressed(TOX_DOWNNLOAD_HOST, sizeof(TOX_DOWNNLOAD_HOST),
-		REQUEST, sizeof(REQUEST) - 1,
-		new_updater_len,
-		1024 * 1024 * 4,
-		TOX_SELF_PUBLICK_UPDATE_KEY);
+    new_updater = download_signed_compressed(TOX_DOWNNLOAD_HOST, sizeof(TOX_DOWNNLOAD_HOST),
+                  REQUEST, sizeof(REQUEST) - 1,
+                  new_updater_len,
+                  1024 * 1024 * 4,
+                  TOX_SELF_PUBLICK_UPDATE_KEY);
 
-	return new_updater;
+    return new_updater;
 }
 
 static _Bool install_new_updater(void *new_updater_data, uint32_t new_updater_data_len)
 {
-    #ifdef __WIN32__
+#ifdef __WIN32__
     char new_path[MAX_PATH];
     FILE *file;
 
-	memcpy(new_path, TOX_UPDATER_PATH, TOX_UPDATER_PATH_LEN);
-	strcat(new_path, ".old");
+    memcpy(new_path, TOX_UPDATER_PATH, TOX_UPDATER_PATH_LEN);
+    strcat(new_path, ".old");
 
     DeleteFile(new_path);
     MoveFile(TOX_UPDATER_PATH, new_path);
 
-	file = fopen(TOX_UPDATER_PATH, "wb");
+    file = fopen(TOX_UPDATER_PATH, "wb");
     if(!file) {
-		fprintf(LOG_FILE, "failed to write new updater");
+        fprintf(LOG_FILE, "failed to write new updater");
         return 0;
     }
 
-	fwrite(new_updater_data, 1, new_updater_data_len, file);
+    fwrite(new_updater_data, 1, new_updater_data_len, file);
 
     fclose(file);
 
-	ShellExecute(NULL, "open", TOX_UPDATER_PATH, NULL, NULL, SW_SHOW);
+    ShellExecute(NULL, "open", TOX_UPDATER_PATH, NULL, NULL, SW_SHOW);
     return 1;
-    #else
+#else
     /* self update not implemented */
     return 0;
-    #endif
+#endif
 }
 
 static void download_and_install_new_utox_version()
 {
-	FILE *file;
-	void *new_version_data;
-	uint32_t len, rlen;
-	new_version_data = download_signed_compressed(TOX_DOWNNLOAD_HOST, sizeof(TOX_DOWNNLOAD_HOST),
-									  REQUEST, sizeof(REQUEST) - 1,
-									  &len,
-									  1024 * 1024 * 4,
-									  TOX_SELF_PUBLICK_KEY);
+    FILE *file;
+    void *new_version_data;
+    uint32_t len, rlen;
+    new_version_data = download_signed_compressed(TOX_DOWNNLOAD_HOST, sizeof(TOX_DOWNNLOAD_HOST),
+                       REQUEST, sizeof(REQUEST) - 1,
+                       &len,
+                       1024 * 1024 * 4,
+                       TOX_SELF_PUBLICK_KEY);
 
-	if (!new_version_data) {
-		fprintf(LOG_FILE, "download failed\n");
-		open_utox_and_exit();
-	}
+    if (!new_version_data) {
+        fprintf(LOG_FILE, "download failed\n");
+        open_utox_and_exit();
+    }
 
-	fprintf(LOG_FILE, "Inflated size: %u\n", len);
+    fprintf(LOG_FILE, "Inflated size: %u\n", len);
 
-	/* delete old version if found */
-	file = fopen("version", "rb");
-	if (file) {
-		char old_name[32];
-		rlen = fread(old_name, 1, sizeof(old_name) - 1, file);
-		old_name[rlen] = 0;
+    /* delete old version if found */
+    file = fopen("version", "rb");
+    if (file) {
+        char old_name[32];
+        rlen = fread(old_name, 1, sizeof(old_name) - 1, file);
+        old_name[rlen] = 0;
 
-		DeleteFile(old_name);
-		fclose(file);
-	}
+        DeleteFile(old_name);
+        fclose(file);
+    }
 
-	/* write file */
-	file = fopen(TOX_FILE_NAME, "wb");
-	if (!file) {
-		fprintf(LOG_FILE, "fopen failed\n");
-		free(new_version_data);
-		return;
-	}
+    /* write file */
+    file = fopen(TOX_FILE_NAME, "wb");
+    if (!file) {
+        fprintf(LOG_FILE, "fopen failed\n");
+        free(new_version_data);
+        return;
+    }
 
-	rlen = fwrite(new_version_data, 1, len, file);
-	fclose(file);
-	free(new_version_data);
-	if (rlen != len) {
-		fprintf(LOG_FILE, "write failed (%u)\n", rlen);
-		return;
-	}
+    rlen = fwrite(new_version_data, 1, len, file);
+    fclose(file);
+    free(new_version_data);
+    if (rlen != len) {
+        fprintf(LOG_FILE, "write failed (%u)\n", rlen);
+        return;
+    }
 
-	/* write version to file */
-	file = fopen("version", "wb");
-	if (file) {
-		fprintf(file, "%s", TOX_FILE_NAME);
-		fclose(file);
-	}
+    /* write version to file */
+    file = fopen("version", "wb");
+    if (file) {
+        fprintf(file, "%s", TOX_FILE_NAME);
+        fclose(file);
+    }
 }
 
 static int check_new_version()
 {
-	FILE *file;
-	char *new_version_data;
-	char *str;
-	uint32_t len;
-	_Bool newversion;
+    FILE *file;
+    char *new_version_data;
+    char *str;
+    uint32_t len;
+    _Bool newversion;
 
-	newversion = 0;
+    newversion = 0;
 
-	new_version_data = (char*) download_signed(TOX_DOWNNLOAD_HOST, sizeof(TOX_DOWNNLOAD_HOST),
-		(char*)REQUEST_VERSION, sizeof(REQUEST_VERSION) - 1,
-		&len,
-		7 + 4,
-		TOX_SELF_PUBLICK_KEY);
+    new_version_data = (char*) download_signed(TOX_DOWNNLOAD_HOST, sizeof(TOX_DOWNNLOAD_HOST),
+                       (char*)REQUEST_VERSION, sizeof(REQUEST_VERSION) - 1,
+                       &len,
+                       7 + 4,
+                       TOX_SELF_PUBLICK_KEY);
 
-	if (!new_version_data) {
-		fprintf(LOG_FILE, "version download failed\n");
-		return -1;
-	}
+    if (!new_version_data) {
+        fprintf(LOG_FILE, "version download failed\n");
+        return -1;
+    }
 
-	if (len != 7 + 4) {
-		fprintf(LOG_FILE, "invalid version length (%u)\n", len);
-		free(new_version_data);
-		return -1;
-	}
+    if (len != 7 + 4) {
+        fprintf(LOG_FILE, "invalid version length (%u)\n", len);
+        free(new_version_data);
+        return -1;
+    }
 
-	str = new_version_data + 4;
-	len -= 4;
+    str = new_version_data + 4;
+    len -= 4;
 
-	if (str[6] > VERSION + '0') {
-		fprintf(LOG_FILE, "new updater version available (%u)\n", str[6]);
+    if (str[6] > VERSION + '0') {
+        fprintf(LOG_FILE, "new updater version available (%u)\n", str[6]);
 
-		char *new_updater_data;
-		int new_updater_data_len;
+        char *new_updater_data;
+        int new_updater_data_len;
 
-		new_updater_data = download_new_updater(&new_updater_data_len);
-		
-		if (!new_updater_data) {
-			fprintf(LOG_FILE, "self update download failed\n");
-			open_utox_and_exit();
-		}
+        new_updater_data = download_new_updater(&new_updater_data_len);
 
-		if (install_new_updater(new_updater_data, new_updater_data_len)) {
-			fprintf(LOG_FILE, "successful self update\n");
+        if (!new_updater_data) {
+            fprintf(LOG_FILE, "self update download failed\n");
+            open_utox_and_exit();
+        }
 
-			free(new_version_data);
+        if (install_new_updater(new_updater_data, new_updater_data_len)) {
+            fprintf(LOG_FILE, "successful self update\n");
 
-			restart_updater();
-		}
-	}
+            free(new_version_data);
 
-	if (str[5] == ' ') {
-		str[5] = 0;
-	}
-	else {
-		str[6] = 0;
-	}
+            restart_updater();
+        }
+    }
 
-	strcpy(TOX_FILE_NAME + 6, str);
-	strcat(TOX_FILE_NAME, ".exe");
-	fprintf(LOG_FILE, "Version: %s\n", str);
-	free(new_version_data);
+    if (str[5] == ' ') {
+        str[5] = 0;
+    }
+    else {
+        str[6] = 0;
+    }
 
-	/* check if we already have this version */
-	file = fopen(TOX_FILE_NAME, "rb");
-	if (file) {
-		fprintf(LOG_FILE, "Already up to date\n");
-		fclose(file);
-		return 0;
-	}
+    strcpy(TOX_FILE_NAME + 6, str);
+    strcat(TOX_FILE_NAME, ".exe");
+    fprintf(LOG_FILE, "Version: %s\n", str);
+    free(new_version_data);
 
-	return 1;
+    /* check if we already have this version */
+    file = fopen(TOX_FILE_NAME, "rb");
+    if (file) {
+        fprintf(LOG_FILE, "Already up to date\n");
+        fclose(file);
+        return 0;
+    }
+
+    return 1;
 }
 
-static _Bool install_tox(int create_desktop_shortcut, int create_startmenu_shortcut, int use_with_tox_url, wchar_t *install_path, int install_path_len){
+static _Bool install_tox(int create_desktop_shortcut, int create_startmenu_shortcut, int use_with_tox_url, wchar_t *install_path, int install_path_len) {
 
-	char dir[MAX_PATH];
+    char dir[MAX_PATH];
 
-	wchar_t selfpath[MAX_PATH];
-	GetModuleFileNameW(MY_HINSTANCE, selfpath, MAX_PATH);
+    wchar_t selfpath[MAX_PATH];
+    GetModuleFileNameW(MY_HINSTANCE, selfpath, MAX_PATH);
 
-	SetCurrentDirectoryW(install_path);
-	CreateDirectory("Tox", NULL);
-	SetCurrentDirectory("Tox");
-	CopyFileW(selfpath, L"utox_runner.exe", 0);
-	
+    SetCurrentDirectoryW(install_path);
+    CreateDirectory("Tox", NULL);
+    SetCurrentDirectory("Tox");
+    CopyFileW(selfpath, L"utox_runner.exe", 0);
 
-	set_current_status("downloading and installing tox");
 
-	download_and_install_new_utox_version();
+    set_current_status("downloading and installing tox");
 
-	HRESULT hr;
+    download_and_install_new_utox_version();
 
-	if (create_desktop_shortcut || create_startmenu_shortcut) {
-		//start menu
-		IShellLink* psl;
+    HRESULT hr;
 
-		// Get a pointer to the IShellLink interface. It is assumed that CoInitialize
-		// has already been called.
-		hr = CoCreateInstance(&CLSID_ShellLink, NULL, CLSCTX_INPROC_SERVER, &IID_IShellLink, (LPVOID*)&psl);
-		if (SUCCEEDED(hr)) {
-			IPersistFile* ppf;
+    if (create_desktop_shortcut || create_startmenu_shortcut) {
+        //start menu
+        IShellLink* psl;
 
-			// Set the path to the shortcut target and add the description.
+        // Get a pointer to the IShellLink interface. It is assumed that CoInitialize
+        // has already been called.
+        hr = CoCreateInstance(&CLSID_ShellLink, NULL, CLSCTX_INPROC_SERVER, &IID_IShellLink, (LPVOID*)&psl);
+        if (SUCCEEDED(hr)) {
+            IPersistFile* ppf;
 
-			GetCurrentDirectory(MAX_PATH, dir);
-			psl->lpVtbl->SetWorkingDirectory(psl, dir);
-			strcat(dir, "\\utox_runner.exe");
-			psl->lpVtbl->SetPath(psl, dir);
-			psl->lpVtbl->SetDescription(psl, "Tox");
+            // Set the path to the shortcut target and add the description.
 
-			// Query IShellLink for the IPersistFile interface, used for saving the
-			// shortcut in persistent storage.
-			hr = psl->lpVtbl->QueryInterface(psl, &IID_IPersistFile, (LPVOID*)&ppf);
+            GetCurrentDirectory(MAX_PATH, dir);
+            psl->lpVtbl->SetWorkingDirectory(psl, dir);
+            strcat(dir, "\\utox_runner.exe");
+            psl->lpVtbl->SetPath(psl, dir);
+            psl->lpVtbl->SetDescription(psl, "Tox");
 
-			if (SUCCEEDED(hr)) {
-				wchar_t wsz[MAX_PATH];
-				if (create_desktop_shortcut) {
-					hr = SHGetFolderPathW(NULL, CSIDL_STARTMENU, NULL, 0, wsz);
-					if (SUCCEEDED(hr)) {
-						fprintf(LOG_FILE, "%ls\n", wsz);
-						wcscat(wsz, L"\\Programs\\Tox.lnk");
-						hr = ppf->lpVtbl->Save(ppf, wsz, TRUE);
-					}
-				}
+            // Query IShellLink for the IPersistFile interface, used for saving the
+            // shortcut in persistent storage.
+            hr = psl->lpVtbl->QueryInterface(psl, &IID_IPersistFile, (LPVOID*)&ppf);
 
-				if (create_startmenu_shortcut) {
-					hr = SHGetFolderPathW(NULL, CSIDL_DESKTOPDIRECTORY, NULL, 0, wsz);
-					if (SUCCEEDED(hr)) {
-						wcscat(wsz, L"\\Tox.lnk");
-						hr = ppf->lpVtbl->Save(ppf, wsz, TRUE);
-					}
-				}
+            if (SUCCEEDED(hr)) {
+                wchar_t wsz[MAX_PATH];
+                if (create_desktop_shortcut) {
+                    hr = SHGetFolderPathW(NULL, CSIDL_STARTMENU, NULL, 0, wsz);
+                    if (SUCCEEDED(hr)) {
+                        fprintf(LOG_FILE, "%ls\n", wsz);
+                        wcscat(wsz, L"\\Programs\\Tox.lnk");
+                        hr = ppf->lpVtbl->Save(ppf, wsz, TRUE);
+                    }
+                }
 
-				ppf->lpVtbl->Release(ppf);
-			}
-			psl->lpVtbl->Release(psl);
-		}
-	}
+                if (create_startmenu_shortcut) {
+                    hr = SHGetFolderPathW(NULL, CSIDL_DESKTOPDIRECTORY, NULL, 0, wsz);
+                    if (SUCCEEDED(hr)) {
+                        wcscat(wsz, L"\\Tox.lnk");
+                        hr = ppf->lpVtbl->Save(ppf, wsz, TRUE);
+                    }
+                }
 
-	if (use_with_tox_url) {
-		GetCurrentDirectory(MAX_PATH, dir);
-		strcat(dir, "\\utox_runner.exe");
+                ppf->lpVtbl->Release(ppf);
+            }
+            psl->lpVtbl->Release(psl);
+        }
+    }
 
-		char str[MAX_PATH];
+    if (use_with_tox_url) {
+        GetCurrentDirectory(MAX_PATH, dir);
+        strcat(dir, "\\utox_runner.exe");
 
-		HKEY key;
-		if (RegCreateKeyEx(HKEY_CLASSES_ROOT, "tox", 0, NULL, 0, KEY_ALL_ACCESS, NULL, &key, NULL) == ERROR_SUCCESS) {
-			fprintf(LOG_FILE, "nice\n");
-			RegSetValueEx(key, NULL, 0, REG_SZ, (BYTE*)"URL:Tox Protocol", sizeof("URL:Tox Protocol"));
-			RegSetValueEx(key, "URL Protocol", 0, REG_SZ, (BYTE*)"", sizeof(""));
+        char str[MAX_PATH];
 
-			HKEY key2;
-			if (RegCreateKeyEx(key, "DefaultIcon", 0, NULL, 0, KEY_ALL_ACCESS, NULL, &key2, NULL) == ERROR_SUCCESS) {
-				int i = sprintf(str, "%s,101", dir) + 1;
-				RegSetValueEx(key2, NULL, 0, REG_SZ, (BYTE*)str, i);
-			}
+        HKEY key;
+        if (RegCreateKeyEx(HKEY_CLASSES_ROOT, "tox", 0, NULL, 0, KEY_ALL_ACCESS, NULL, &key, NULL) == ERROR_SUCCESS) {
+            fprintf(LOG_FILE, "nice\n");
+            RegSetValueEx(key, NULL, 0, REG_SZ, (BYTE*)"URL:Tox Protocol", sizeof("URL:Tox Protocol"));
+            RegSetValueEx(key, "URL Protocol", 0, REG_SZ, (BYTE*)"", sizeof(""));
 
-			if (RegCreateKeyEx(key, "shell", 0, NULL, 0, KEY_ALL_ACCESS, NULL, &key2, NULL) == ERROR_SUCCESS) {
-				if (RegCreateKeyEx(key2, "open", 0, NULL, 0, KEY_ALL_ACCESS, NULL, &key, NULL) == ERROR_SUCCESS) {
-					if (RegCreateKeyEx(key, "command", 0, NULL, 0, KEY_ALL_ACCESS, NULL, &key2, NULL) == ERROR_SUCCESS) {
-						int i = sprintf(str, "%s %%1", dir) + 1;
-						RegSetValueEx(key2, NULL, 0, REG_SZ, (BYTE*)str, i);
-					}
-				}
-			}
-		}
-	}
+            HKEY key2;
+            if (RegCreateKeyEx(key, "DefaultIcon", 0, NULL, 0, KEY_ALL_ACCESS, NULL, &key2, NULL) == ERROR_SUCCESS) {
+                int i = sprintf(str, "%s,101", dir) + 1;
+                RegSetValueEx(key2, NULL, 0, REG_SZ, (BYTE*)str, i);
+            }
 
-	return 1;
+            if (RegCreateKeyEx(key, "shell", 0, NULL, 0, KEY_ALL_ACCESS, NULL, &key2, NULL) == ERROR_SUCCESS) {
+                if (RegCreateKeyEx(key2, "open", 0, NULL, 0, KEY_ALL_ACCESS, NULL, &key, NULL) == ERROR_SUCCESS) {
+                    if (RegCreateKeyEx(key, "command", 0, NULL, 0, KEY_ALL_ACCESS, NULL, &key2, NULL) == ERROR_SUCCESS) {
+                        int i = sprintf(str, "%s %%1", dir) + 1;
+                        RegSetValueEx(key2, NULL, 0, REG_SZ, (BYTE*)str, i);
+                    }
+                }
+            }
+        }
+    }
+
+    return 1;
 }
 
-static void start_installiation(){
-	HWND desktop_shortcut_checkbox = GetDlgItem(main_window, ID_DESKTOP_SHORTCUT_CHECKBOX);
-	HWND startmenu_shortcut_checkbox = GetDlgItem(main_window, ID_STARTMENU_SHORTCUT_CHECKBOX);
-	HWND tox_url_checkbox = GetDlgItem(main_window, ID_TOX_URL_CHECKBOX);
-	HWND browse_textbox = GetDlgItem(main_window, ID_BROWSE_TEXTBOX);
+static void start_installiation() {
+    HWND desktop_shortcut_checkbox = GetDlgItem(main_window, ID_DESKTOP_SHORTCUT_CHECKBOX);
+    HWND startmenu_shortcut_checkbox = GetDlgItem(main_window, ID_STARTMENU_SHORTCUT_CHECKBOX);
+    HWND tox_url_checkbox = GetDlgItem(main_window, ID_TOX_URL_CHECKBOX);
+    HWND browse_textbox = GetDlgItem(main_window, ID_BROWSE_TEXTBOX);
 
-	_Bool create_desktop_shortcut, create_startmenu_shortcut, use_with_tox_url;
+    _Bool create_desktop_shortcut, create_startmenu_shortcut, use_with_tox_url;
 
-	wchar_t install_path[MAX_PATH];
-	int install_path_len = GetWindowTextW(browse_textbox, install_path, MAX_PATH);
+    wchar_t install_path[MAX_PATH];
+    int install_path_len = GetWindowTextW(browse_textbox, install_path, MAX_PATH);
 
-	if (install_path_len == 0){
-		MessageBox(main_window, "Please select a folder to install uTox in", "Error", MB_OK);
-		return;
-	}
+    if (install_path_len == 0) {
+        MessageBox(main_window, "Please select a folder to install uTox in", "Error", MB_OK);
+        return;
+    }
 
-	create_desktop_shortcut = Button_GetCheck(desktop_shortcut_checkbox);
-	create_startmenu_shortcut = Button_GetCheck(startmenu_shortcut_checkbox);
-	use_with_tox_url = Button_GetCheck(tox_url_checkbox);
+    create_desktop_shortcut = Button_GetCheck(desktop_shortcut_checkbox);
+    create_startmenu_shortcut = Button_GetCheck(startmenu_shortcut_checkbox);
+    use_with_tox_url = Button_GetCheck(tox_url_checkbox);
 
-	fprintf(LOG_FILE, "will install with options: %u %u %u %s\n", create_desktop_shortcut, create_startmenu_shortcut, use_with_tox_url, install_path);
+    fprintf(LOG_FILE, "will install with options: %u %u %u %s\n", create_desktop_shortcut, create_startmenu_shortcut, use_with_tox_url, install_path);
 
-	if (MessageBox(main_window, "Confirm installing Tox on your computer ?", "", MB_YESNOCANCEL) != IDYES)
-		return;
+    if (MessageBox(main_window, "Confirm installing Tox on your computer ?", "", MB_YESNOCANCEL) != IDYES)
+        return;
 
-	if (install_tox(create_desktop_shortcut, create_startmenu_shortcut, use_with_tox_url, install_path, install_path_len)){
-		set_current_status("Installiation completed");
+    if (install_tox(create_desktop_shortcut, create_startmenu_shortcut, use_with_tox_url, install_path, install_path_len)) {
+        set_current_status("Installiation completed");
 
-		MessageBox(main_window, "Installed Success", "uTox Install", MB_OK);
-		open_utox_and_exit();
-	}
-	else{
-		set_current_status("Error during installiation");
+        MessageBox(main_window, "Installed Success", "uTox Install", MB_OK);
+        open_utox_and_exit();
+    }
+    else {
+        set_current_status("Error during installiation");
 
-		MessageBox(main_window, "Installiation Failed, Please send the log file to the developers", "uTox Install", MB_OK);
-		exit(0);
-	}
+        MessageBox(main_window, "Installiation Failed, Please send the log file to the developers", "uTox Install", MB_OK);
+        exit(0);
+    }
 }
 
-static void browse_for_install_folder(){
-	HWND browse_textbox = GetDlgItem(main_window, ID_BROWSE_TEXTBOX);
+static void browse_for_install_folder() {
+    HWND browse_textbox = GetDlgItem(main_window, ID_BROWSE_TEXTBOX);
 
-	HRESULT hr = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
+    HRESULT hr = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
 
-	IFileOpenDialog *pFileOpen;
-	hr = CoCreateInstance(&CLSID_FileOpenDialog, NULL, CLSCTX_ALL, &IID_IFileOpenDialog, (void*)&pFileOpen);
-	if (SUCCEEDED(hr)) {
-		hr = pFileOpen->lpVtbl->SetOptions(pFileOpen, FOS_PICKFOLDERS);
-		hr = pFileOpen->lpVtbl->SetTitle(pFileOpen, L"Tox Install Location");
-		hr = pFileOpen->lpVtbl->Show(pFileOpen, NULL);
+    IFileOpenDialog *pFileOpen;
+    hr = CoCreateInstance(&CLSID_FileOpenDialog, NULL, CLSCTX_ALL, &IID_IFileOpenDialog, (void*)&pFileOpen);
+    if (SUCCEEDED(hr)) {
+        hr = pFileOpen->lpVtbl->SetOptions(pFileOpen, FOS_PICKFOLDERS);
+        hr = pFileOpen->lpVtbl->SetTitle(pFileOpen, L"Tox Install Location");
+        hr = pFileOpen->lpVtbl->Show(pFileOpen, NULL);
 
-		if (SUCCEEDED(hr)) {
-			IShellItem *pItem;
-			hr = pFileOpen->lpVtbl->GetResult(pFileOpen, &pItem);
+        if (SUCCEEDED(hr)) {
+            IShellItem *pItem;
+            hr = pFileOpen->lpVtbl->GetResult(pFileOpen, &pItem);
 
-			if (SUCCEEDED(hr)) {
-				PWSTR pszFilePath;
-				hr = pItem->lpVtbl->GetDisplayName(pItem, SIGDN_FILESYSPATH, &pszFilePath);
+            if (SUCCEEDED(hr)) {
+                PWSTR pszFilePath;
+                hr = pItem->lpVtbl->GetDisplayName(pItem, SIGDN_FILESYSPATH, &pszFilePath);
 
-				if (SUCCEEDED(hr)) {
+                if (SUCCEEDED(hr)) {
 
-					SetWindowTextW(browse_textbox, pszFilePath);
-					CoTaskMemFree(pszFilePath);
-				}
-				pItem->lpVtbl->Release(pItem);
-			}
-		}
-		pFileOpen->lpVtbl->Release(pFileOpen);
+                    SetWindowTextW(browse_textbox, pszFilePath);
+                    CoTaskMemFree(pszFilePath);
+                }
+                pItem->lpVtbl->Release(pItem);
+            }
+        }
+        pFileOpen->lpVtbl->Release(pFileOpen);
 
-		CoUninitialize();
-	}
-	else{
-		wchar_t path[MAX_PATH];
-		BROWSEINFOW bi = {
-			.pszDisplayName = path,
-			.lpszTitle = L"Install Location",
-			.ulFlags = BIF_USENEWUI | BIF_NONEWFOLDERBUTTON,
-		};
-		LPITEMIDLIST lpItem = SHBrowseForFolderW(&bi);
-		if (!lpItem) {
-			open_utox_and_exit();
-		}
+        CoUninitialize();
+    }
+    else {
+        wchar_t path[MAX_PATH];
+        BROWSEINFOW bi = {
+            .pszDisplayName = path,
+            .lpszTitle = L"Install Location",
+            .ulFlags = BIF_USENEWUI | BIF_NONEWFOLDERBUTTON,
+        };
+        LPITEMIDLIST lpItem = SHBrowseForFolderW(&bi);
+        if (!lpItem) {
+            open_utox_and_exit();
+        }
 
-		SHGetPathFromIDListW(lpItem, path);
-		SetWindowTextW(browse_textbox, path);
-	}
+        SHGetPathFromIDListW(lpItem, path);
+        SetWindowTextW(browse_textbox, path);
+    }
 }
 
-static void check_updates(){
-	set_current_status("fetching new version data..");
+static void check_updates() {
+    set_current_status("fetching new version data..");
 
-	int new_version = check_new_version();
+    int new_version = check_new_version();
 
-	if (new_version == -1){
-		MessageBox(main_window, "Error fetching latest version data, Please check your internet connection. \n\n Exiting now...", "Error", MB_OK);
-		exit(0);
-	}
+    if (new_version == -1) {
+        MessageBox(main_window, "Error fetching latest version data, Please check your internet connection. \n\n Exiting now...", "Error", MB_OK);
+        exit(0);
+    }
 
-	set_current_status("version data fetched successfully.");
+    set_current_status("version data fetched successfully.");
 
-	if (is_tox_installed){
+    if (is_tox_installed) {
 
-		set_download_progress(0);
-		set_current_status("Found new version");
+        set_download_progress(0);
+        set_current_status("Found new version");
 
-		if (new_version && MessageBox(NULL, "A new version of uTox is available.\nUpdate?", "uTox Updater", MB_YESNO | MB_ICONQUESTION) == IDYES) {
-			download_and_install_new_utox_version();
-		}
+        if (new_version && MessageBox(NULL, "A new version of uTox is available.\nUpdate?", "uTox Updater", MB_YESNO | MB_ICONQUESTION) == IDYES) {
+            download_and_install_new_utox_version();
+        }
 
-		open_utox_and_exit();
-	}
+        open_utox_and_exit();
+    }
 }
 
 INT_PTR CALLBACK MainDialogProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam)
 {
-	UNREFERENCED_PARAMETER(lParam);
+    UNREFERENCED_PARAMETER(lParam);
 
-	switch (message)
-	{
-		case WM_INITDIALOG:
-			return (INT_PTR)TRUE;
-		case WM_CLOSE:
-			PostQuitMessage(0);
-			break;
+    switch (message)
+    {
+    case WM_INITDIALOG:
+        return (INT_PTR)TRUE;
+    case WM_CLOSE:
+        PostQuitMessage(0);
+        break;
 
-		case WM_COMMAND:{
-			if (HIWORD(wParam) == BN_CLICKED){
-				int id = LOWORD(wParam);
-				HWND control_hwnd = (HWND)lParam;
+    case WM_COMMAND: {
+        if (HIWORD(wParam) == BN_CLICKED) {
+            int id = LOWORD(wParam);
+            HWND control_hwnd = (HWND)lParam;
 
-				switch (id){
-					case ID_CANCEL_BUTTON:
-						if (MessageBox(main_window, "Are you sure you want to exit", "uTox", MB_YESNOCANCEL) == IDYES){
-							if (is_tox_installed){
-								open_utox_and_exit();
-							}
-							else{
-								exit(0);
-							}
-						}
-						break;
+            switch (id) {
+            case ID_CANCEL_BUTTON:
+                if (MessageBox(main_window, "Are you sure you want to exit", "uTox", MB_YESNOCANCEL) == IDYES) {
+                    if (is_tox_installed) {
+                        open_utox_and_exit();
+                    }
+                    else {
+                        exit(0);
+                    }
+                }
+                break;
 
-					case ID_INSTALL_BUTTON:
-						_beginthread(start_installiation, 0, 0);
+            case ID_INSTALL_BUTTON:
+                _beginthread(start_installiation, 0, 0);
 
-						break;
+                break;
 
-					case ID_BROWSE_BUTTON:
-						browse_for_install_folder();
+            case ID_BROWSE_BUTTON:
+                browse_for_install_folder();
 
-						break;
-				}
-			}
-			break;
-		}
-	}
+                break;
+            }
+        }
+        break;
+    }
+    }
 
-	return (INT_PTR)FALSE;
+    return (INT_PTR)FALSE;
 }
 
 
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR cmd, int nCmdShow)
 {
-	LOG_FILE = fopen("tox_log.txt", "w");
+    LOG_FILE = fopen("tox_log.txt", "w");
 
-	MY_CMD_ARGS = cmd;
-	MY_HINSTANCE = hInstance;
+    MY_CMD_ARGS = cmd;
+    MY_HINSTANCE = hInstance;
 
     if(*cmd) {
         HMODULE hModule = GetModuleHandle(NULL);
@@ -530,9 +530,9 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR cmd, int n
         SetCurrentDirectory(path);
     }
 
-	TOX_UPDATER_PATH_LEN = GetModuleFileName(NULL, TOX_UPDATER_PATH, MAX_PATH);
+    TOX_UPDATER_PATH_LEN = GetModuleFileName(NULL, TOX_UPDATER_PATH, MAX_PATH);
 
-	init_tox_file_name();
+    init_tox_file_name();
 
     /* initialize winsock */
     WSADATA wsaData;
@@ -561,42 +561,42 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR cmd, int n
     INITCOMMONCONTROLSEX InitCtrlEx;
 
     InitCtrlEx.dwSize = sizeof(INITCOMMONCONTROLSEX);
-	InitCtrlEx.dwICC = ICC_PROGRESS_CLASS;
-	InitCommonControlsEx(&InitCtrlEx);
+    InitCtrlEx.dwICC = ICC_PROGRESS_CLASS;
+    InitCommonControlsEx(&InitCtrlEx);
 
-	main_window = CreateDialog(MY_HINSTANCE, MAKEINTRESOURCE(IDD_MAIN_DIALOG), NULL, MainDialogProc);
+    main_window = CreateDialog(MY_HINSTANCE, MAKEINTRESOURCE(IDD_MAIN_DIALOG), NULL, MainDialogProc);
 
-	if (!main_window){
-		fprintf(LOG_FILE, "error creating main window");
-		exit(0);
-	}
-	
-	progressbar = GetDlgItem(main_window, ID_PROGRESSBAR);
-	status_label = GetDlgItem(main_window, IDC_STATUS_LABEL);
+    if (!main_window) {
+        fprintf(LOG_FILE, "error creating main window");
+        exit(0);
+    }
 
-	if (!is_tox_installed){
-		// show installer controls
-		ShowWindow(GetDlgItem(main_window, ID_INSTALL_BUTTON), SW_SHOW);
-		ShowWindow(GetDlgItem(main_window, ID_DESKTOP_SHORTCUT_CHECKBOX), SW_SHOW);
-		ShowWindow(GetDlgItem(main_window, ID_STARTMENU_SHORTCUT_CHECKBOX), SW_SHOW);
-		ShowWindow(GetDlgItem(main_window, ID_TOX_URL_CHECKBOX), SW_SHOW);
+    progressbar = GetDlgItem(main_window, ID_PROGRESSBAR);
+    status_label = GetDlgItem(main_window, IDC_STATUS_LABEL);
 
-		ShowWindow(GetDlgItem(main_window, ID_BROWSE_TEXTBOX), SW_SHOW);
-		ShowWindow(GetDlgItem(main_window, ID_BROWSE_BUTTON), SW_SHOW);
-		ShowWindow(GetDlgItem(main_window, IDC_INSTALL_FOLDER_LABEL), SW_SHOW);
-	}
-	
-	ShowWindow(main_window, SW_SHOW);
+    if (!is_tox_installed) {
+        // show installer controls
+        ShowWindow(GetDlgItem(main_window, ID_INSTALL_BUTTON), SW_SHOW);
+        ShowWindow(GetDlgItem(main_window, ID_DESKTOP_SHORTCUT_CHECKBOX), SW_SHOW);
+        ShowWindow(GetDlgItem(main_window, ID_STARTMENU_SHORTCUT_CHECKBOX), SW_SHOW);
+        ShowWindow(GetDlgItem(main_window, ID_TOX_URL_CHECKBOX), SW_SHOW);
 
-	_beginthread(check_updates, 0, NULL);
+        ShowWindow(GetDlgItem(main_window, ID_BROWSE_TEXTBOX), SW_SHOW);
+        ShowWindow(GetDlgItem(main_window, ID_BROWSE_BUTTON), SW_SHOW);
+        ShowWindow(GetDlgItem(main_window, IDC_INSTALL_FOLDER_LABEL), SW_SHOW);
+    }
 
-	MSG msg;
+    ShowWindow(main_window, SW_SHOW);
 
-	while (GetMessage(&msg, NULL, 0, 0) > 0){
-		DispatchMessage(&msg);
-	}
+    _beginthread(check_updates, 0, NULL);
 
-	open_utox_and_exit();
+    MSG msg;
+
+    while (GetMessage(&msg, NULL, 0, 0) > 0) {
+        DispatchMessage(&msg);
+    }
+
+    open_utox_and_exit();
 
     return 0;
 }

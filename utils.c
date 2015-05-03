@@ -61,24 +61,24 @@ void* download(char *host, size_t host_len, char *request, uint16_t request_len,
     char *data = 0;
     _Bool header = 0;
 
-	sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
     if(sock == ~0) {
         printf("socket failed\n");
         return NULL;
     }
 
-	struct hostent *host_ent;
-	host_ent = gethostbyname(host);
+    struct hostent *host_ent;
+    host_ent = gethostbyname(host);
 
-	if (!host_ent)
-		return NULL;
+    if (!host_ent)
+        return NULL;
 
-	SOCKADDR_IN sock_addr;
-	sock_addr.sin_port = htons(80);
-	sock_addr.sin_family = AF_INET;
-	sock_addr.sin_addr.s_addr = *((unsigned long*)host_ent->h_addr);
+    SOCKADDR_IN sock_addr;
+    sock_addr.sin_port = htons(80);
+    sock_addr.sin_family = AF_INET;
+    sock_addr.sin_addr.s_addr = *((unsigned long*)host_ent->h_addr);
 
-	if (connect(sock, (SOCKADDR*)(&sock_addr), sizeof(sock_addr)) != 0) {
+    if (connect(sock, (SOCKADDR*)(&sock_addr), sizeof(sock_addr)) != 0) {
         printf("connect failed\n");
         close(sock);
         return NULL;
@@ -148,8 +148,9 @@ void* download(char *host, size_t host_len, char *request, uint16_t request_len,
             break;
         }
 
-        memcpy(data + rlen, recvbuf, len); rlen += len;
-		set_download_progress((rlen * 100) / dlen);
+        memcpy(data + rlen, recvbuf, len);
+        rlen += len;
+        set_download_progress((rlen * 100) / dlen);
     }
 
     close(sock);
@@ -164,7 +165,7 @@ void* download(char *host, size_t host_len, char *request, uint16_t request_len,
         return NULL;
     }
 
-	*downloaded_length = dlen;
+    *downloaded_length = dlen;
     return data;
 }
 
