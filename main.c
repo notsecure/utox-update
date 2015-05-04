@@ -268,49 +268,52 @@ static _Bool install_tox(int create_desktop_shortcut, int create_startmenu_short
     HRESULT hr;
 
     if (create_desktop_shortcut || create_startmenu_shortcut) {
-        //start menu
-        IShellLink* psl;
+        hr = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
+        if(SUCCEEDED(hr)) {
+            //start menu
+            IShellLink* psl;
 
-        // Get a pointer to the IShellLink interface. It is assumed that CoInitialize
-        // has already been called.
-        hr = CoCreateInstance(&CLSID_ShellLink, NULL, CLSCTX_INPROC_SERVER, &IID_IShellLink, (LPVOID*)&psl);
-        if (SUCCEEDED(hr)) {
-            IPersistFile* ppf;
-
-            // Set the path to the shortcut target and add the description.
-
-            GetCurrentDirectory(MAX_PATH, dir);
-            psl->lpVtbl->SetWorkingDirectory(psl, dir);
-            strcat(dir, "\\utox_runner.exe");
-            psl->lpVtbl->SetPath(psl, dir);
-            psl->lpVtbl->SetDescription(psl, "Tox");
-
-            // Query IShellLink for the IPersistFile interface, used for saving the
-            // shortcut in persistent storage.
-            hr = psl->lpVtbl->QueryInterface(psl, &IID_IPersistFile, (LPVOID*)&ppf);
-
+            // Get a pointer to the IShellLink interface. It is assumed that CoInitialize
+            // has already been called.
+            hr = CoCreateInstance(&CLSID_ShellLink, NULL, CLSCTX_INPROC_SERVER, &IID_IShellLink, (LPVOID*)&psl);
             if (SUCCEEDED(hr)) {
-                wchar_t wsz[MAX_PATH];
-                if (create_desktop_shortcut) {
-                    hr = SHGetFolderPathW(NULL, CSIDL_STARTMENU, NULL, 0, wsz);
-                    if (SUCCEEDED(hr)) {
-                        fprintf(LOG_FILE, "%ls\n", wsz);
-                        wcscat(wsz, L"\\Programs\\Tox.lnk");
-                        hr = ppf->lpVtbl->Save(ppf, wsz, TRUE);
-                    }
-                }
+                IPersistFile* ppf;
 
-                if (create_startmenu_shortcut) {
-                    hr = SHGetFolderPathW(NULL, CSIDL_DESKTOPDIRECTORY, NULL, 0, wsz);
-                    if (SUCCEEDED(hr)) {
-                        wcscat(wsz, L"\\Tox.lnk");
-                        hr = ppf->lpVtbl->Save(ppf, wsz, TRUE);
-                    }
-                }
+                // Set the path to the shortcut target and add the description.
 
-                ppf->lpVtbl->Release(ppf);
+                GetCurrentDirectory(MAX_PATH, dir);
+                psl->lpVtbl->SetWorkingDirectory(psl, dir);
+                strcat(dir, "\\utox_runner.exe");
+                psl->lpVtbl->SetPath(psl, dir);
+                psl->lpVtbl->SetDescription(psl, "Tox");
+
+                // Query IShellLink for the IPersistFile interface, used for saving the
+                // shortcut in persistent storage.
+                hr = psl->lpVtbl->QueryInterface(psl, &IID_IPersistFile, (LPVOID*)&ppf);
+
+                if (SUCCEEDED(hr)) {
+                    wchar_t wsz[MAX_PATH];
+                    if (create_startmenu_shortcut) {
+                        hr = SHGetFolderPathW(NULL, CSIDL_STARTMENU, NULL, 0, wsz);
+                        if (SUCCEEDED(hr)) {
+                            fprintf(LOG_FILE, "%ls\n", wsz);
+                            wcscat(wsz, L"\\Programs\\Tox.lnk");
+                            hr = ppf->lpVtbl->Save(ppf, wsz, TRUE);
+                        }
+                    }
+
+                    if (create_desktop_shortcut) {
+                        hr = SHGetFolderPathW(NULL, CSIDL_DESKTOPDIRECTORY, NULL, 0, wsz);
+                        if (SUCCEEDED(hr)) {
+                            wcscat(wsz, L"\\Tox.lnk");
+                            hr = ppf->lpVtbl->Save(ppf, wsz, TRUE);
+                        }
+                    }
+
+                    ppf->lpVtbl->Release(ppf);
+                }
+                psl->lpVtbl->Release(psl);
             }
-            psl->lpVtbl->Release(psl);
         }
     }
 
