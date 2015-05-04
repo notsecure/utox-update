@@ -121,6 +121,10 @@ static _Bool install_new_updater(void *new_updater_data, uint32_t new_updater_da
 #endif
 }
 
+/* return 0 on success.
+ * return -1 if could not write file.
+ * return -2 if download failed.
+ */
 static int download_and_install_new_utox_version()
 {
     FILE *file;
@@ -134,7 +138,7 @@ static int download_and_install_new_utox_version()
             open_utox_and_exit();
         }
 
-        return -1;
+        return -2;
     }
 
     LOG_TO_FILE("Inflated size: %u\n", len);
@@ -170,8 +174,12 @@ static int download_and_install_new_utox_version()
     /* write version to file */
     file = fopen("version", "wb");
     if (file) {
-        fprintf(file, "%s", TOX_VERSION_NAME);
+        rlen = fwrite(TOX_VERSION_NAME, 1, APPENDED_VERSION_LENGTH, file);
         fclose(file);
+        if (rlen != APPENDED_VERSION_LENGTH) {
+            return -1;
+        }
+
         return 0;
     }
 
@@ -243,7 +251,11 @@ static int check_new_version()
     return 1;
 }
 
-static _Bool install_tox(int create_desktop_shortcut, int create_startmenu_shortcut, int use_with_tox_url, wchar_t *install_path, int install_path_len) {
+/* return 0 on success.
+ * return -1 if could not write file.
+ * return -2 if download failed.
+ */
+static int install_tox(int create_desktop_shortcut, int create_startmenu_shortcut, int use_with_tox_url, wchar_t *install_path, int install_path_len) {
 
     char dir[MAX_PATH];
 
@@ -252,12 +264,14 @@ static _Bool install_tox(int create_desktop_shortcut, int create_startmenu_short
 
     SHCreateDirectoryExW(NULL, install_path, NULL);
     SetCurrentDirectoryW(install_path);
-    CopyFileW(selfpath, L"utox_runner.exe", 0);
+    if (CopyFileW(selfpath, L"utox_runner.exe", 0) == 0)
+        return -1;
 
     set_current_status("downloading and installing tox...");
 
-    if (download_and_install_new_utox_version() == -1)
-        return 0;
+    int ret = download_and_install_new_utox_version();
+    if (ret != 0)
+        return ret;
 
     HRESULT hr;
 
@@ -340,7 +354,7 @@ static _Bool install_tox(int create_desktop_shortcut, int create_startmenu_short
         }
     }
 
-    return 1;
+    return 0;
 }
 
 static void start_installation() {
@@ -368,11 +382,16 @@ static void start_installation() {
     if (MessageBox(main_window, "Are you sure you want to continue?", "uTox Updater", MB_YESNO) != IDYES)
         return;
 
-    if (install_tox(create_desktop_shortcut, create_startmenu_shortcut, use_with_tox_url, install_path, install_path_len)) {
+    int ret = install_tox(create_desktop_shortcut, create_startmenu_shortcut, use_with_tox_url, install_path, install_path_len);
+    if (ret == 0) {
         set_current_status("installation complete");
 
         MessageBox(main_window, "Installation successful.", "uTox Updater", MB_OK);
         open_utox_and_exit();
+    } else if (ret == -1) {
+        set_current_status("could not write to install directory.");
+    } else if (ret == -2) {
+        set_current_status("download error, please check your internet connection and try again.");
     } else {
         set_current_status("error during installation");
 
