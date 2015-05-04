@@ -276,7 +276,7 @@ static _Bool install_tox(int create_desktop_shortcut, int create_startmenu_short
     SetCurrentDirectoryW(install_path);
     CopyFileW(selfpath, L"utox_runner.exe", 0);
 
-    set_current_status("downloading and installing tox");
+    set_current_status("downloading and installing tox...");
 
     download_and_install_new_utox_version();
 
@@ -361,7 +361,7 @@ static _Bool install_tox(int create_desktop_shortcut, int create_startmenu_short
     return 1;
 }
 
-static void start_installiation() {
+static void start_installation() {
     HWND desktop_shortcut_checkbox = GetDlgItem(main_window, ID_DESKTOP_SHORTCUT_CHECKBOX);
     HWND startmenu_shortcut_checkbox = GetDlgItem(main_window, ID_STARTMENU_SHORTCUT_CHECKBOX);
     HWND tox_url_checkbox = GetDlgItem(main_window, ID_TOX_URL_CHECKBOX);
@@ -383,19 +383,19 @@ static void start_installiation() {
 
     fprintf(LOG_FILE, "will install with options: %u %u %u %ls\n", create_desktop_shortcut, create_startmenu_shortcut, use_with_tox_url, install_path);
 
-    if (MessageBox(main_window, "Confirm installing Tox on your computer ?", "", MB_YESNOCANCEL) != IDYES)
+    if (MessageBox(main_window, "Are you sure you want to continue?", "uTox Updater", MB_YESNOCANCEL) != IDYES)
         return;
 
     if (install_tox(create_desktop_shortcut, create_startmenu_shortcut, use_with_tox_url, install_path, install_path_len)) {
-        set_current_status("Installiation completed");
+        set_current_status("installation complete");
 
-        MessageBox(main_window, "Installed Success", "uTox Install", MB_OK);
+        MessageBox(main_window, "Installation successful.", "uTox Updater", MB_OK);
         open_utox_and_exit();
     }
     else {
-        set_current_status("Error during installiation");
+        set_current_status("error during installation");
 
-        MessageBox(main_window, "Installiation Failed, Please send the log file to the developers", "uTox Install", MB_OK);
+        MessageBox(main_window, "Installation failed. Please send the log file to the developers", "uTox Installer", MB_OK);
         exit(0);
     }
 }
@@ -460,16 +460,16 @@ static void browse_for_install_folder() {
 }
 
 static void check_updates() {
-    set_current_status("fetching new version data..");
+    set_current_status("fetching new version data...");
 
     int new_version = check_new_version();
 
     if (new_version == -1) {
-        MessageBox(main_window, "Error fetching latest version data, Please check your internet connection. \n\n Exiting now...", "Error", MB_OK);
+        MessageBox(main_window, "Error fetching latest version data. Please check your internet connection.\n\nExiting now...", "Error", MB_OK);
         exit(0);
     }
 
-    set_current_status("version data fetched successfully.");
+    set_current_status("version data fetched successfully");
 
     if (is_tox_installed) {
 
@@ -503,7 +503,7 @@ INT_PTR CALLBACK MainDialogProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM l
 
             switch (id) {
             case ID_CANCEL_BUTTON:
-                if (MessageBox(main_window, "Are you sure you want to exit", "uTox", MB_YESNOCANCEL) == IDYES) {
+                if (MessageBox(main_window, "Are you sure you want to exit?", "uTox Updater", MB_YESNOCANCEL) == IDYES) {
                     if (is_tox_installed) {
                         open_utox_and_exit();
                     }
@@ -514,7 +514,7 @@ INT_PTR CALLBACK MainDialogProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM l
                 break;
 
             case ID_INSTALL_BUTTON:
-                _beginthread(start_installiation, 0, 0);
+                _beginthread(start_installation, 0, 0);
 
                 break;
 
@@ -574,7 +574,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR cmd, int n
         return 1;
     }
 
-    /* check if we are on a 64-bit system*/
+    /* check if we are on a 64-bit system */
     _Bool iswow64 = 0;
     _Bool (WINAPI *fnIsWow64Process)(HANDLE, _Bool*)  = (void*)GetProcAddress(GetModuleHandleA("kernel32"),"IsWow64Process");
     if(fnIsWow64Process) {
