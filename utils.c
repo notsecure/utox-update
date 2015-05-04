@@ -1,3 +1,14 @@
+#include <ws2tcpip.h>
+#include <time.h>
+
+#include <winsock2.h>
+#define close(x) closesocket(x)
+
+#define SODIUM_STATIC
+#include <sodium.h>
+
+#include "xz/xz.h"
+
 #include "utils.h"
 
 static uint32_t inflate(void *dest, void *src, uint32_t dest_size, uint32_t src_len)
@@ -22,7 +33,7 @@ static uint32_t inflate(void *dest, void *src, uint32_t dest_size, uint32_t src_
     int r = xz_dec_run(dec, &buf);
     xz_dec_end(dec);
 
-    printf("%i\n", r);
+    LOG_TO_FILE("%i\n", r);
 
     /* out_pos is only set on success*/
     return buf.out_pos;
@@ -35,7 +46,7 @@ static void* checksignature(void *data, uint32_t dlen, const uint8_t *self_publi
 
     mdata = malloc(dlen);
     if(!mdata) {
-        printf("malloc failed\n");
+        LOG_TO_FILE("malloc failed\n");
         free(data);
         return NULL;
     }
@@ -44,7 +55,7 @@ static void* checksignature(void *data, uint32_t dlen, const uint8_t *self_publi
     free(data);
 
     if(r == -1) {
-        printf("invalid signature\n");
+        LOG_TO_FILE("invalid signature\n");
         free(mdata);
         return NULL;
     }
@@ -61,18 +72,18 @@ static void* download(struct sockaddr_storage *sock_addr, size_t addr_len, char 
 
     sock = socket(sock_addr->ss_family, SOCK_STREAM, IPPROTO_TCP);
     if(sock == ~0) {
-        printf("socket failed\n");
+        LOG_TO_FILE("socket failed\n");
         return NULL;
     }
 
     if (connect(sock, (struct sockaddr *)sock_addr, addr_len) != 0) {
-        printf("connect failed\n");
+        LOG_TO_FILE("connect failed\n");
         close(sock);
         return NULL;
     }
 
     if(send(sock, request, request_len, 0) != request_len) {
-        printf("send failed\n");
+        LOG_TO_FILE("send failed\n");
         close(sock);
         return NULL;
     }
@@ -86,14 +97,14 @@ static void* download(struct sockaddr_storage *sock_addr, size_t addr_len, char 
 
             /* check for "Not Found" response (todo: only check first line of response)*/
             if(strstr((char*)recvbuf, "404 Not Found\r\n")) {
-                printf("Not Found\n");
+                LOG_TO_FILE("Not Found\n");
                 break;
             }
 
             /* find the length field */
             char *str = strstr((char*)recvbuf, "Content-Length: ");
             if(!str) {
-                printf("invalid HTTP response (1)\n");
+                LOG_TO_FILE("invalid HTTP response (1)\n");
                 break;
             }
 
@@ -101,14 +112,14 @@ static void* download(struct sockaddr_storage *sock_addr, size_t addr_len, char 
             str += sizeof("Content-Length: ") - 1;
             dlen = strtol(str, NULL, 10);
             if(dlen > downloaded_len_max) {
-                printf("too large\n");
+                LOG_TO_FILE("too large\n");
                 break;
             }
 
             /* find the end of the http response header */
             str = strstr(str, "\r\n\r\n");
             if(!str) {
-                printf("invalid HTTP response (2)\n");
+                LOG_TO_FILE("invalid HTTP response (2)\n");
                 break;
             }
 
@@ -117,11 +128,11 @@ static void* download(struct sockaddr_storage *sock_addr, size_t addr_len, char 
             /* allocate buffer to read into) */
             data = malloc(dlen);
             if(!data) {
-                printf("malloc failed (1) (%u)\n", dlen);
+                LOG_TO_FILE("malloc failed (1) (%u)\n", dlen);
                 break;
             }
 
-            printf("Download size: %u\n", dlen);
+            LOG_TO_FILE("Download size: %u\n", dlen);
 
             /* read the first piece */
             rlen = len - (str - (char*)recvbuf);
@@ -133,7 +144,7 @@ static void* download(struct sockaddr_storage *sock_addr, size_t addr_len, char 
 
         /* check if received too much */
         if(rlen + len > dlen) {
-            printf("bad download\n");
+            LOG_TO_FILE("bad download\n");
             break;
         }
 
@@ -146,10 +157,10 @@ static void* download(struct sockaddr_storage *sock_addr, size_t addr_len, char 
 
     if(!header) {
         /* read nothing or invalid header */
-        printf("download() failed\n");
+        LOG_TO_FILE("download() failed\n");
         return NULL;
     } else if(rlen != dlen) {
-        printf("number of bytes read does not match (%u)\n", rlen);
+        LOG_TO_FILE("number of bytes read does not match (%u)\n", rlen);
         free(data);
         return NULL;
     }
@@ -202,11 +213,11 @@ void* download_signed(void *sock_addr, size_t addr_len, const char *host, size_t
     time(&now);
     memcpy(&t, mdata, 4);
 
-    printf("signed %u, now %u\n", (uint32_t)t, (uint32_t)now);
+    LOG_TO_FILE("signed %u, now %u\n", (uint32_t)t, (uint32_t)now);
 
     if(t < now && now - t >= 60 * 60 * 24 * UPDATE_EXPIRE_DAYS) {
         /* build is more than 1 week old: expired */
-        printf("expired signature (%u)\n", (uint32_t)(now - t));
+        LOG_TO_FILE("expired signature (%u)\n", (uint32_t)(now - t));
         free(mdata);
         return NULL;
     }
@@ -222,14 +233,14 @@ void* download_signed_compressed(void *sock_addr, size_t addr_len, const char *h
 
     mdata = download_signed(sock_addr, addr_len, host, host_len, filename, filename_len, &mlen, downloaded_len_max, self_public_key);
     if(!mdata) {
-        printf("file download failed\n");
+        LOG_TO_FILE("file download failed\n");
         return NULL;
     }
 
     /* inflate */
     data = malloc(downloaded_len_max);
     if(!data) {
-        printf("malloc failed (2) (%u)\n", downloaded_len_max);
+        LOG_TO_FILE("malloc failed (2) (%u)\n", downloaded_len_max);
         free(mdata);
         return NULL;
     }
@@ -237,7 +248,7 @@ void* download_signed_compressed(void *sock_addr, size_t addr_len, const char *h
     len = inflate(data, mdata + 4, downloaded_len_max, mlen - 4);
     free(mdata);
     if(len == 0) {
-        printf("inflate failed\n");
+        LOG_TO_FILE("inflate failed\n");
         free(data);
         return NULL;
     }
@@ -246,19 +257,19 @@ void* download_signed_compressed(void *sock_addr, size_t addr_len, const char *h
     return data;
 }
 
-void *download_loop_all_host_ips(_Bool compressed, const char *hosts[], size_t number_hosts, const char *filename, size_t filename_len, uint32_t *downloaded_len, uint32_t downloaded_len_max, const uint8_t *self_public_key, const uint8_t *cmp_end_file, size_t cmp_end_file_len)
+void *download_loop_all_host_ips(_Bool compressed, const char *hosts[], size_t number_hosts, const char *filename, size_t filename_len, uint32_t *downloaded_len, uint32_t downloaded_len_max, const uint8_t *self_public_key, const char *cmp_end_file, size_t cmp_end_file_len)
 {
     time_t now;
     time(&now);
 
-    unsigned int i, index;
+    unsigned int i;
 
     for (i = 0; i < number_hosts; ++i) {
         unsigned int index = (i + now) % number_hosts;
         struct addrinfo *root, *info;
 
         if(getaddrinfo(hosts[index], "80", NULL, &root) != 0) {
-            printf("getaddrinfo failed\n");
+            LOG_TO_FILE("getaddrinfo failed\n");
             continue;
         }
 
