@@ -25,7 +25,6 @@
 #define TOX_EXE_NAME "uTox.exe"
 
 static char TOX_VERSION_NAME[TOX_VERSION_NAME_MAX_LEN];
-static int TOX_VERSION_NAME_LEN;
 
 static char TOX_UPDATER_PATH[MAX_PATH];
 static uint32_t TOX_UPDATER_PATH_LEN;
@@ -59,8 +58,8 @@ static void init_tox_version_name() {
     FILE *version_file = fopen("version", "rb");
 
     if (version_file) {
-        TOX_VERSION_NAME_LEN = fread(TOX_VERSION_NAME, 1, sizeof(TOX_VERSION_NAME) - 1, version_file);
-        TOX_VERSION_NAME[TOX_VERSION_NAME_LEN] = 0;
+        int len = fread(TOX_VERSION_NAME, 1, sizeof(TOX_VERSION_NAME) - 1, version_file);
+        TOX_VERSION_NAME[len] = 0;
         fclose(version_file);
 
         is_tox_installed = 1;
@@ -90,15 +89,7 @@ static void restart_updater() {
 }
 
 static char* download_new_updater(int *new_updater_len) {
-    char *new_updater;
-
-    memcpy(REQUEST + 8, "selfpdate", sizeof("selfpdate") - 1);
-
-    new_updater = download_signed_compressed(TOX_DOWNNLOAD_HOST, sizeof(TOX_DOWNNLOAD_HOST),
-                  REQUEST, sizeof(REQUEST) - 1,
-                  new_updater_len,
-                  1024 * 1024 * 4,
-                  TOX_SELF_PUBLICK_UPDATE_KEY);
+    char *new_updater = download_loop_all_host_ips(1, TOX_DOWNNLOAD_HOSTS, NUMBER_UPDATE_HOSTS, SELF_UPDATER_FILE_NAME, strlen(SELF_UPDATER_FILE_NAME), new_updater_len, 1024 * 1024 * 4, TOX_SELF_PUBLICK_UPDATE_KEY, 0, 0);
 
     return new_updater;
 }
@@ -133,20 +124,20 @@ static _Bool install_new_updater(void *new_updater_data, uint32_t new_updater_da
 #endif
 }
 
-static void download_and_install_new_utox_version()
+static int download_and_install_new_utox_version()
 {
     FILE *file;
     void *new_version_data;
     uint32_t len, rlen;
-    new_version_data = download_signed_compressed(TOX_DOWNNLOAD_HOST, sizeof(TOX_DOWNNLOAD_HOST),
-                       REQUEST, sizeof(REQUEST) - 1,
-                       &len,
-                       1024 * 1024 * 4,
-                       TOX_SELF_PUBLICK_KEY);
+    new_version_data = download_loop_all_host_ips(1, TOX_DOWNNLOAD_HOSTS, NUMBER_UPDATE_HOSTS, GET_NAME, strlen(GET_NAME), &len, 1024 * 1024 * 4, TOX_SELF_PUBLICK_KEY, TOX_VERSION_NAME, APPENDED_VERSION_LENGTH);
 
     if (!new_version_data) {
         fprintf(LOG_FILE, "download failed\n");
-        open_utox_and_exit();
+        if (is_tox_installed) {
+            open_utox_and_exit();
+        }
+
+        return -1;
     }
 
     fprintf(LOG_FILE, "Inflated size: %u\n", len);
@@ -168,7 +159,7 @@ static void download_and_install_new_utox_version()
     if (!file) {
         fprintf(LOG_FILE, "fopen failed\n");
         free(new_version_data);
-        return;
+        return -1;
     }
 
     rlen = fwrite(new_version_data, 1, len, file);
@@ -176,7 +167,7 @@ static void download_and_install_new_utox_version()
     free(new_version_data);
     if (rlen != len) {
         fprintf(LOG_FILE, "write failed (%u)\n", rlen);
-        return;
+        return -1;
     }
 
     /* write version to file */
@@ -184,7 +175,10 @@ static void download_and_install_new_utox_version()
     if (file) {
         fprintf(file, "%s", TOX_VERSION_NAME);
         fclose(file);
+        return 0;
     }
+
+    return -1;
 }
 
 static int check_new_version()
@@ -197,11 +191,7 @@ static int check_new_version()
 
     newversion = 0;
 
-    new_version_data = (char*) download_signed(TOX_DOWNNLOAD_HOST, sizeof(TOX_DOWNNLOAD_HOST),
-                       (char*)REQUEST_VERSION, sizeof(REQUEST_VERSION) - 1,
-                       &len,
-                       7 + 4,
-                       TOX_SELF_PUBLICK_KEY);
+    new_version_data = download_loop_all_host_ips(0, TOX_DOWNNLOAD_HOSTS, NUMBER_UPDATE_HOSTS, VERSION_FILE_NAME, strlen(VERSION_FILE_NAME), &len, 7 + 4, TOX_SELF_PUBLICK_KEY, 0, 0);
 
     if (!new_version_data) {
         fprintf(LOG_FILE, "version download failed\n");
@@ -239,17 +229,12 @@ static int check_new_version()
         }
     }
 
-    if (str[5] == ' ') {
-        str[5] = 0;
-    }
-    else {
-        str[6] = 0;
-    }
+    str[6] = 0;
 
     fprintf(LOG_FILE, "Version: %s\n", str);
     free(new_version_data);
 
-    if (strcmp(TOX_VERSION_NAME + 2, str) == 0) {
+    if (memcmp(TOX_VERSION_NAME + 2, str, 6) == 0) {
         /* check if we already have the exe */
         file = fopen(TOX_EXE_NAME, "rb");
         if (!file) {
@@ -261,7 +246,7 @@ static int check_new_version()
         return 0;
     }
 
-    strcpy(TOX_VERSION_NAME + 2, str);
+    memcpy(TOX_VERSION_NAME + 2, str, 7);
     return 1;
 }
 
@@ -278,7 +263,8 @@ static _Bool install_tox(int create_desktop_shortcut, int create_startmenu_short
 
     set_current_status("downloading and installing tox...");
 
-    download_and_install_new_utox_version();
+    if (download_and_install_new_utox_version() == -1)
+        return 0;
 
     HRESULT hr;
 
@@ -391,11 +377,10 @@ static void start_installation() {
 
         MessageBox(main_window, "Installation successful.", "uTox Updater", MB_OK);
         open_utox_and_exit();
-    }
-    else {
+    } else {
         set_current_status("error during installation");
 
-        MessageBox(main_window, "Installation failed. Please send the log file to the developers", "uTox Updater", MB_OK);
+        MessageBox(main_window, "Installation failed. If it's not an internet issue please send the log file (tox_log.txt) to the developers.", "uTox Updater", MB_OK);
         exit(0);
     }
 }
@@ -406,9 +391,9 @@ static void set_utox_path(wchar_t *path)
 
     unsigned int str_len = wcslen(path);
     if (str_len != 0) {
-        wchar_t file_path[str_len + sizeof(L"\\Tox")];
+        wchar_t file_path[str_len + sizeof(L"\\uTox")];
         memcpy(file_path, path, str_len * sizeof(wchar_t));
-        memcpy(file_path + str_len, L"\\Tox", sizeof(L"\\Tox"));
+        memcpy(file_path + str_len, L"\\uTox", sizeof(L"\\uTox"));
         SetWindowTextW(browse_textbox, file_path);
     }
 }
@@ -534,16 +519,19 @@ INT_PTR CALLBACK MainDialogProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM l
 
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR cmd, int nCmdShow)
 {
-    CreateMutex(NULL, 0, UTOX_TITLE);
-    if(GetLastError() == ERROR_ALREADY_EXISTS) {
-        HWND window = FindWindow(UTOX_TITLE, NULL);
-        SetForegroundWindow(window);
-        return 0;
-    }
-
-    CreateMutex(NULL, 0, "utox_runner");
-    if(GetLastError() == ERROR_ALREADY_EXISTS) {
-        return 0;
+    unsigned int counter = 0;
+    while (1) {
+        CreateMutex(NULL, 0, UTOX_TITLE);
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            if (counter < 2) {
+                Sleep(500);
+                ++counter;
+            } else {
+                return 0;
+            }
+        } else {
+            break;
+        }
     }
 
     LOG_FILE = fopen("tox_log.txt", "w");
@@ -582,9 +570,9 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR cmd, int n
     }
 
     if(iswow64) {
-        /* replace the arch in the REQUEST/TOX_VERSION_NAME strings (todo: not use constants for offsets) */
-        REQUEST[8] = '6';
-        REQUEST[9] = '4';
+        /* replace the arch in the GET_NAME/TOX_VERSION_NAME strings (todo: not use constants for offsets) */
+        GET_NAME[3] = '6';
+        GET_NAME[4] = '4';
         TOX_VERSION_NAME[0] = '6';
         TOX_VERSION_NAME[1] = '4';
         fprintf(LOG_FILE, "detected 64bit system\n");
@@ -622,7 +610,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR cmd, int n
         ShowWindow(GetDlgItem(main_window, ID_TOX_URL_CHECKBOX), SW_SHOW);
 
         wchar_t appdatalocal_path[MAX_PATH] = {0};
-        if (SHGetFolderPathW(NULL, CSIDL_LOCAL_APPDATA, NULL, 0, appdatalocal_path) == S_OK) {
+        if (SHGetFolderPathW(NULL, CSIDL_APPDATA, NULL, 0, appdatalocal_path) == S_OK) {
             set_utox_path(appdatalocal_path);
         }
 

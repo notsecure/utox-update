@@ -5,11 +5,20 @@
 #include <stdint.h>
 #include <sodium.h>
 
-
-#define GET_NAME "win32-latest"
-#define TOX_DOWNNLOAD_HOST "dl.utox.org"
+#define APPENDED_VERSION_LENGTH (6 + 2)
 
 #define VERSION 3
+
+#define NUMBER_UPDATE_HOSTS 2
+
+static const char *TOX_DOWNNLOAD_HOSTS[NUMBER_UPDATE_HOSTS] = {
+    "dl.utox.org",
+    "dl.u.tox.im"
+};
+
+#define SELF_UPDATER_FILE_NAME "selfpdate"
+#define VERSION_FILE_NAME "version1"
+static char GET_NAME[] = "win32-latest";
 
 static const uint8_t TOX_SELF_PUBLICK_KEY[crypto_sign_ed25519_PUBLICKEYBYTES] = {
     0x88, 0x90, 0x5F, 0x29, 0x46, 0xBE, 0x7C, 0x4B, 0xBD, 0xEC, 0xE4, 0x67, 0x14, 0x9C, 0x1D, 0x78,
@@ -20,16 +29,6 @@ static const uint8_t TOX_SELF_PUBLICK_UPDATE_KEY[crypto_sign_ed25519_PUBLICKEYBY
     0x52, 0xA7, 0x9B, 0xCA, 0x48, 0x35, 0xD6, 0x34, 0x5E, 0x7D, 0xEF, 0x8B, 0x97, 0xC3, 0x54, 0x2D,
     0x37, 0x9A, 0x9A, 0x8B, 0x00, 0xEB, 0xF3, 0xA8, 0xAD, 0x03, 0x92, 0x3E, 0x0E, 0x50, 0x77, 0x58
 };
-
-static const char REQUEST_VERSION[] =
-    "GET /version1 HTTP/1.0\r\n"
-    "Host: " TOX_DOWNNLOAD_HOST "\r\n"
-    "\r\n";
-
-static char REQUEST[] =
-    "GET /" GET_NAME " HTTP/1.0\r\n"
-    "Host: " TOX_DOWNNLOAD_HOST "\r\n"
-    "\r\n";
 
 
 #endif
