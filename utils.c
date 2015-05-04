@@ -277,7 +277,7 @@ void *download_loop_all_host_ips(_Bool compressed, const char *hosts[], size_t n
 
         do {
             LOG_TO_FILE("addrinfo %i %i %i %i %i\n", info->ai_flags, info->ai_family, info->ai_socktype, info->ai_protocol, info->ai_addrlen);
-            if (info->ai_socktype != SOCK_STREAM)
+            if (info->ai_socktype && info->ai_socktype != SOCK_STREAM)
                 continue;
 
             LOG_TO_FILE("Trying this one\n");
