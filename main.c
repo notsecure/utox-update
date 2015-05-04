@@ -395,7 +395,7 @@ static void start_installation() {
     else {
         set_current_status("error during installation");
 
-        MessageBox(main_window, "Installation failed. Please send the log file to the developers", "uTox Installer", MB_OK);
+        MessageBox(main_window, "Installation failed. Please send the log file to the developers", "uTox Updater", MB_OK);
         exit(0);
     }
 }
