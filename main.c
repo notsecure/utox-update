@@ -530,26 +530,25 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR cmd, int n
         }
     }
 
-    LOG_FILE = fopen("tox_log.txt", "w");
-
     MY_CMD_ARGS = cmd;
     MY_HINSTANCE = hInstance;
-
-    if(*cmd) {
-        HMODULE hModule = GetModuleHandle(NULL);
-        char path[MAX_PATH], *s;
-        int len = GetModuleFileName(hModule, path, MAX_PATH);
-        s = path + len;
-        while(*s != '\\') {
-            s--;
-        }
-        *s = 0;
-        SetCurrentDirectory(path);
-    }
 
     TOX_UPDATER_PATH_LEN = GetModuleFileName(NULL, TOX_UPDATER_PATH, MAX_PATH);
     TOX_UPDATER_PATH[TOX_UPDATER_PATH_LEN] = 0;
 
+    {
+        char path[MAX_PATH], *s;
+        memcpy(path, TOX_UPDATER_PATH, TOX_UPDATER_PATH_LEN + 1);
+        s = path + TOX_UPDATER_PATH_LEN;
+        while(*s != '\\') {
+            s--;
+        }
+
+        *s = 0;
+        SetCurrentDirectory(path);
+    }
+
+    LOG_FILE = fopen("tox_log.txt", "w");
     init_tox_version_name();
 
     /* initialize winsock */
