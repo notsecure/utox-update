@@ -97,7 +97,7 @@ static char* download_new_updater(int *new_updater_len) {
 static _Bool install_new_updater(void *new_updater_data, uint32_t new_updater_data_len)
 {
 #ifdef __WIN32__
-    char new_path[MAX_PATH];
+    char new_path[MAX_PATH] = {0};
     FILE *file;
 
     memcpy(new_path, TOX_UPDATER_PATH, TOX_UPDATER_PATH_LEN);
@@ -217,15 +217,14 @@ static int check_new_version()
 
         if (!new_updater_data) {
             fprintf(LOG_FILE, "self update download failed\n");
-            open_utox_and_exit();
-        }
+        } else {
+            if (install_new_updater(new_updater_data, new_updater_data_len)) {
+                fprintf(LOG_FILE, "successful self update\n");
 
-        if (install_new_updater(new_updater_data, new_updater_data_len)) {
-            fprintf(LOG_FILE, "successful self update\n");
+                free(new_version_data);
 
-            free(new_version_data);
-
-            restart_updater();
+                restart_updater();
+            }
         }
     }
 
@@ -552,6 +551,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR cmd, int n
     }
 
     TOX_UPDATER_PATH_LEN = GetModuleFileName(NULL, TOX_UPDATER_PATH, MAX_PATH);
+    TOX_UPDATER_PATH[TOX_UPDATER_PATH_LEN] = 0;
 
     init_tox_version_name();
 

@@ -16,7 +16,7 @@ static const char *TOX_DOWNNLOAD_HOSTS[NUMBER_UPDATE_HOSTS] = {
     "dl.u.tox.im"
 };
 
-#define SELF_UPDATER_FILE_NAME "selfpdate"
+#define SELF_UPDATER_FILE_NAME "winselfpdate"
 #define VERSION_FILE_NAME "version1"
 static char GET_NAME[] = "win32-latest";
 
