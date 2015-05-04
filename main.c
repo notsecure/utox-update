@@ -19,9 +19,13 @@
 #include "consts.h"
 #include "resource.h"
 
-#define TOX_FILE_NAME_MAX_LEN 32
-static char TOX_FILE_NAME[TOX_FILE_NAME_MAX_LEN] = GET_NAME;
-static int TOX_FILE_NAME_LEN;
+#define TOX_VERSION_NAME_MAX_LEN 32
+
+#define UTOX_TITLE "uTox"
+#define TOX_EXE_NAME "uTox.exe"
+
+static char TOX_VERSION_NAME[TOX_VERSION_NAME_MAX_LEN];
+static int TOX_VERSION_NAME_LEN;
 
 static char TOX_UPDATER_PATH[MAX_PATH];
 static uint32_t TOX_UPDATER_PATH_LEN;
@@ -51,12 +55,12 @@ void set_current_status(char *status) {
     SetWindowText(status_label, status);
 }
 
-static void init_tox_file_name() {
+static void init_tox_version_name() {
     FILE *version_file = fopen("version", "rb");
 
     if (version_file) {
-        TOX_FILE_NAME_LEN = fread(TOX_FILE_NAME, 1, sizeof(TOX_FILE_NAME) - 1, version_file);
-        TOX_FILE_NAME[TOX_FILE_NAME_LEN] = 0;
+        TOX_VERSION_NAME_LEN = fread(TOX_VERSION_NAME, 1, sizeof(TOX_VERSION_NAME) - 1, version_file);
+        TOX_VERSION_NAME[TOX_VERSION_NAME_LEN] = 0;
         fclose(version_file);
 
         is_tox_installed = 1;
@@ -72,7 +76,7 @@ static void open_utox_and_exit() {
     char str[strlen(MY_CMD_ARGS) + sizeof(UTOX_UPDATER_PARAM)];
     strcpy(str, MY_CMD_ARGS);
     strcat(str, UTOX_UPDATER_PARAM);
-    ShellExecute(NULL, "open", TOX_FILE_NAME, MY_CMD_ARGS, NULL, SW_SHOW);
+    ShellExecute(NULL, "open", TOX_EXE_NAME, str, NULL, SW_SHOW);
 
     fclose(LOG_FILE);
     exit(0);
@@ -154,12 +158,13 @@ static void download_and_install_new_utox_version()
         rlen = fread(old_name, 1, sizeof(old_name) - 1, file);
         old_name[rlen] = 0;
 
+        /* Only there for smooth update from old updater. */
         DeleteFile(old_name);
         fclose(file);
     }
 
     /* write file */
-    file = fopen(TOX_FILE_NAME, "wb");
+    file = fopen(TOX_EXE_NAME, "wb");
     if (!file) {
         fprintf(LOG_FILE, "fopen failed\n");
         free(new_version_data);
@@ -177,7 +182,7 @@ static void download_and_install_new_utox_version()
     /* write version to file */
     file = fopen("version", "wb");
     if (file) {
-        fprintf(file, "%s", TOX_FILE_NAME);
+        fprintf(file, "%s", TOX_VERSION_NAME);
         fclose(file);
     }
 }
@@ -241,19 +246,22 @@ static int check_new_version()
         str[6] = 0;
     }
 
-    strcpy(TOX_FILE_NAME + 6, str);
-    strcat(TOX_FILE_NAME, ".exe");
     fprintf(LOG_FILE, "Version: %s\n", str);
     free(new_version_data);
 
-    /* check if we already have this version */
-    file = fopen(TOX_FILE_NAME, "rb");
-    if (file) {
-        fprintf(LOG_FILE, "Already up to date\n");
-        fclose(file);
+    if (strcmp(TOX_VERSION_NAME + 2, str) == 0) {
+        /* check if we already have the exe */
+        file = fopen(TOX_EXE_NAME, "rb");
+        if (!file) {
+            fprintf(LOG_FILE, "We don't have the file\n");
+            fclose(file);
+            return 1;
+        }
+
         return 0;
     }
 
+    strcpy(TOX_VERSION_NAME + 2, str);
     return 1;
 }
 
@@ -323,7 +331,7 @@ static _Bool install_tox(int create_desktop_shortcut, int create_startmenu_short
 
     if (use_with_tox_url) {
         GetCurrentDirectory(MAX_PATH, dir);
-        strcat(dir, "\\utox_runner.exe");
+        strcat(dir, "\\" TOX_EXE_NAME);
 
         char str[MAX_PATH];
 
@@ -526,6 +534,18 @@ INT_PTR CALLBACK MainDialogProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM l
 
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR cmd, int nCmdShow)
 {
+    CreateMutex(NULL, 0, UTOX_TITLE);
+    if(GetLastError() == ERROR_ALREADY_EXISTS) {
+        HWND window = FindWindow(UTOX_TITLE, NULL);
+        SetForegroundWindow(window);
+        return 0;
+    }
+
+    CreateMutex(NULL, 0, "utox_runner");
+    if(GetLastError() == ERROR_ALREADY_EXISTS) {
+        return 0;
+    }
+
     LOG_FILE = fopen("tox_log.txt", "w");
 
     MY_CMD_ARGS = cmd;
@@ -545,7 +565,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR cmd, int n
 
     TOX_UPDATER_PATH_LEN = GetModuleFileName(NULL, TOX_UPDATER_PATH, MAX_PATH);
 
-    init_tox_file_name();
+    init_tox_version_name();
 
     /* initialize winsock */
     WSADATA wsaData;
@@ -562,32 +582,32 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR cmd, int n
     }
 
     if(iswow64) {
-        /* replace the arch in the REQUEST/TOX_FILE_NAME strings (todo: not use constants for offsets) */
+        /* replace the arch in the REQUEST/TOX_VERSION_NAME strings (todo: not use constants for offsets) */
         REQUEST[8] = '6';
         REQUEST[9] = '4';
-        TOX_FILE_NAME[3] = '6';
-        TOX_FILE_NAME[4] = '4';
+        TOX_VERSION_NAME[0] = '6';
+        TOX_VERSION_NAME[1] = '4';
         fprintf(LOG_FILE, "detected 64bit system\n");
     }
 
-    /* init common controls */
-    INITCOMMONCONTROLSEX InitCtrlEx;
-
-    InitCtrlEx.dwSize = sizeof(INITCOMMONCONTROLSEX);
-    InitCtrlEx.dwICC = ICC_PROGRESS_CLASS;
-    InitCommonControlsEx(&InitCtrlEx);
-
-    main_window = CreateDialog(MY_HINSTANCE, MAKEINTRESOURCE(IDD_MAIN_DIALOG), NULL, MainDialogProc);
-
-    if (!main_window) {
-        fprintf(LOG_FILE, "error creating main window");
-        exit(0);
-    }
-
-    progressbar = GetDlgItem(main_window, ID_PROGRESSBAR);
-    status_label = GetDlgItem(main_window, IDC_STATUS_LABEL);
-
     if (!is_tox_installed) {
+        /* init common controls */
+        INITCOMMONCONTROLSEX InitCtrlEx;
+
+        InitCtrlEx.dwSize = sizeof(INITCOMMONCONTROLSEX);
+        InitCtrlEx.dwICC = ICC_PROGRESS_CLASS;
+        InitCommonControlsEx(&InitCtrlEx);
+
+        main_window = CreateDialog(MY_HINSTANCE, MAKEINTRESOURCE(IDD_MAIN_DIALOG), NULL, MainDialogProc);
+
+        if (!main_window) {
+            fprintf(LOG_FILE, "error creating main window %lu\n", GetLastError());
+            exit(0);
+        }
+
+        progressbar = GetDlgItem(main_window, ID_PROGRESSBAR);
+        status_label = GetDlgItem(main_window, IDC_STATUS_LABEL);
+
         // show installer controls
         ShowWindow(GetDlgItem(main_window, ID_INSTALL_BUTTON), SW_SHOW);
 
@@ -609,9 +629,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR cmd, int n
         ShowWindow(GetDlgItem(main_window, ID_BROWSE_TEXTBOX), SW_SHOW);
         ShowWindow(GetDlgItem(main_window, ID_BROWSE_BUTTON), SW_SHOW);
         ShowWindow(GetDlgItem(main_window, IDC_INSTALL_FOLDER_LABEL), SW_SHOW);
+        ShowWindow(main_window, SW_SHOW);
     }
-
-    ShowWindow(main_window, SW_SHOW);
 
     _beginthread(check_updates, 0, NULL);
 
