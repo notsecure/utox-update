@@ -383,7 +383,7 @@ static void start_installation() {
 
     fprintf(LOG_FILE, "will install with options: %u %u %u %ls\n", create_desktop_shortcut, create_startmenu_shortcut, use_with_tox_url, install_path);
 
-    if (MessageBox(main_window, "Are you sure you want to continue?", "uTox Updater", MB_YESNOCANCEL) != IDYES)
+    if (MessageBox(main_window, "Are you sure you want to continue?", "uTox Updater", MB_YESNO) != IDYES)
         return;
 
     if (install_tox(create_desktop_shortcut, create_startmenu_shortcut, use_with_tox_url, install_path, install_path_len)) {
@@ -503,7 +503,7 @@ INT_PTR CALLBACK MainDialogProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM l
 
             switch (id) {
             case ID_CANCEL_BUTTON:
-                if (MessageBox(main_window, "Are you sure you want to exit?", "uTox Updater", MB_YESNOCANCEL) == IDYES) {
+                if (MessageBox(main_window, "Are you sure you want to exit?", "uTox Updater", MB_YESNO) == IDYES) {
                     if (is_tox_installed) {
                         open_utox_and_exit();
                     }
