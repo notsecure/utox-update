@@ -257,6 +257,8 @@ void* download_signed_compressed(void *sock_addr, size_t addr_len, const char *h
     return data;
 }
 
+#define TRY_TIMES 2
+
 void *download_loop_all_host_ips(_Bool compressed, const char *hosts[], size_t number_hosts, const char *filename, size_t filename_len, uint32_t *downloaded_len, uint32_t downloaded_len_max, const uint8_t *self_public_key, const char *cmp_end_file, size_t cmp_end_file_len)
 {
     time_t now;
@@ -264,7 +266,7 @@ void *download_loop_all_host_ips(_Bool compressed, const char *hosts[], size_t n
 
     unsigned int i;
 
-    for (i = 0; i < number_hosts; ++i) {
+    for (i = 0; i < (number_hosts * TRY_TIMES); ++i) {
         unsigned int index = (i + now) % number_hosts;
         struct addrinfo *root, *info;
 
@@ -289,15 +291,21 @@ void *download_loop_all_host_ips(_Bool compressed, const char *hosts[], size_t n
                 data = download_signed(info->ai_addr, info->ai_addrlen, hosts[index], strlen(hosts[index]), filename, filename_len, &dled_len, downloaded_len_max, self_public_key);
             }
 
-            if (!data)
+            if (!data) {
+                LOG_TO_FILE("data is NULL\n");
                 continue;
+            }
 
             if (cmp_end_file && cmp_end_file_len) {
-                if (dled_len < cmp_end_file_len)
+                if (dled_len < cmp_end_file_len) {
+                    LOG_TO_FILE("Too Small %u < %u\n", dled_len, cmp_end_file_len);
                     continue;
+                }
 
-                if (memcmp(cmp_end_file, data + (dled_len - cmp_end_file_len), cmp_end_file_len) != 0)
+                if (memcmp(cmp_end_file, data + (dled_len - cmp_end_file_len), cmp_end_file_len) != 0) {
+                    LOG_TO_FILE("cmp_end_file cmp error\n");
                     continue;
+                }
 
                 dled_len -= cmp_end_file_len;
             }
