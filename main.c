@@ -190,7 +190,6 @@ static int check_new_version()
 {
     FILE *file;
     char *new_version_data;
-    char *str;
     uint32_t len;
 
     new_version_data = download_loop_all_host_ips(0, TOX_DOWNNLOAD_HOSTS, NUMBER_UPDATE_HOSTS, VERSION_FILE_NAME, strlen(VERSION_FILE_NAME), &len, 7 + 4, TOX_SELF_PUBLICK_KEY, 0, 0);
@@ -206,8 +205,8 @@ static int check_new_version()
         return -1;
     }
 
-    str = new_version_data + 4;
-    len -= 4;
+    char str[7];
+    memcpy(str, new_version_data + 4, 7);
 
     if (str[6] > VERSION + '0') {
         LOG_TO_FILE("new updater version available (%u)\n", str[6]);
