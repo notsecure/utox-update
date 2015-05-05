@@ -303,7 +303,20 @@ void *download_loop_all_host_ips(_Bool compressed, const char *hosts[], size_t n
                 }
 
                 if (memcmp(cmp_end_file, data + (dled_len - cmp_end_file_len), cmp_end_file_len) != 0) {
-                    LOG_TO_FILE("cmp_end_file cmp error\n");
+                    LOG_TO_FILE("cmp_end_file cmp error length %u\n", cmp_end_file_len);
+                    unsigned int j;
+                    for (j = 0; j < cmp_end_file_len; ++j) {
+                        LOG_TO_FILE("%c", cmp_end_file[j]);
+                    }
+
+                    LOG_TO_FILE("\n");
+
+                    uint8_t *tmpdt = data + (dled_len - cmp_end_file_len);
+                    for (j = 0; j < cmp_end_file_len; ++j) {
+                        LOG_TO_FILE("%c", tmpdt[j]);
+                    }
+
+                    LOG_TO_FILE("\n");
                     continue;
                 }
 
