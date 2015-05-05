@@ -24,6 +24,11 @@
 
 #define UTOX_TITLE "uTox"
 #define TOX_EXE_NAME "uTox.exe"
+#define TOX_VERSION_FILENAME "version"
+#define TOX_UPDATER_FILENAME "utox_runner.exe"
+
+#define TOX_UNINSTALL_FILENAME "uninstall.bat"
+#define TOX_UNINSTALL_CONTENTS TOX_UPDATER_FILENAME " --uninstall\n"
 
 static char TOX_VERSION_NAME[TOX_VERSION_NAME_MAX_LEN];
 
@@ -55,7 +60,7 @@ void set_current_status(char *status) {
 }
 
 static void init_tox_version_name() {
-    FILE *version_file = fopen("version", "rb");
+    FILE *version_file = fopen(TOX_VERSION_FILENAME, "rb");
 
     if (version_file) {
         int len = fread(TOX_VERSION_NAME, 1, sizeof(TOX_VERSION_NAME) - 1, version_file);
@@ -144,7 +149,7 @@ static int download_and_install_new_utox_version()
     LOG_TO_FILE("Inflated size: %u\n", len);
 
     /* delete old version if found */
-    file = fopen("version", "rb");
+    file = fopen(TOX_VERSION_FILENAME, "rb");
     if (file) {
         char old_name[32];
         rlen = fread(old_name, 1, sizeof(old_name) - 1, file);
@@ -172,7 +177,7 @@ static int download_and_install_new_utox_version()
     }
 
     /* write version to file */
-    file = fopen("version", "wb");
+    file = fopen(TOX_VERSION_FILENAME, "wb");
     if (file) {
         rlen = fwrite(TOX_VERSION_NAME, 1, APPENDED_VERSION_LENGTH, file);
         fclose(file);
@@ -250,6 +255,21 @@ static int check_new_version()
     return 1;
 }
 
+static int write_uninstall()
+{
+    FILE *file = fopen(TOX_UNINSTALL_FILENAME, "wb");
+
+    if (!file)
+        return -1;
+
+    int len = fwrite(TOX_UNINSTALL_CONTENTS, 1, sizeof(TOX_UNINSTALL_CONTENTS) - 1, file);
+
+    if (len != sizeof(TOX_UNINSTALL_CONTENTS) - 1)
+        return -1;
+
+    return 0;
+}
+
 /* return 0 on success.
  * return -1 if could not write file.
  * return -2 if download failed.
@@ -263,12 +283,16 @@ static int install_tox(int create_desktop_shortcut, int create_startmenu_shortcu
 
     SHCreateDirectoryExW(NULL, install_path, NULL);
     SetCurrentDirectoryW(install_path);
-    if (CopyFileW(selfpath, L"utox_runner.exe", 0) == 0)
+    if (CopyFileW(selfpath, L""TOX_UPDATER_FILENAME, 0) == 0)
         return -1;
+
+    int ret = write_uninstall();
+    if (ret != 0)
+        return ret;
 
     set_current_status("downloading and installing tox...");
 
-    int ret = download_and_install_new_utox_version();
+    ret = download_and_install_new_utox_version();
     if (ret != 0)
         return ret;
 
@@ -290,7 +314,7 @@ static int install_tox(int create_desktop_shortcut, int create_startmenu_shortcu
 
                 GetCurrentDirectory(MAX_PATH, dir);
                 psl->lpVtbl->SetWorkingDirectory(psl, dir);
-                strcat(dir, "\\utox_runner.exe");
+                strcat(dir, "\\"TOX_UPDATER_FILENAME);
                 psl->lpVtbl->SetPath(psl, dir);
                 psl->lpVtbl->SetDescription(psl, "Tox");
 
@@ -299,7 +323,7 @@ static int install_tox(int create_desktop_shortcut, int create_startmenu_shortcu
                 hr = psl->lpVtbl->QueryInterface(psl, &IID_IPersistFile, (LPVOID*)&ppf);
 
                 if (SUCCEEDED(hr)) {
-                    wchar_t wsz[MAX_PATH];
+                    wchar_t wsz[MAX_PATH + 64];
                     if (create_startmenu_shortcut) {
                         hr = SHGetFolderPathW(NULL, CSIDL_STARTMENU, NULL, 0, wsz);
                         if (SUCCEEDED(hr)) {
@@ -354,6 +378,32 @@ static int install_tox(int create_desktop_shortcut, int create_startmenu_shortcu
     }
 
     return 0;
+}
+
+static int uninstall_tox()
+{
+    if (MessageBox(NULL, "Are you sure you want to uninstall uTox?", "uTox Updater", MB_YESNO | MB_ICONQUESTION) == IDYES) {
+        wchar_t wsz[MAX_PATH + 64];
+
+        if (SUCCEEDED(SHGetFolderPathW(NULL, CSIDL_STARTMENU, NULL, 0, wsz))) {
+            wcscat(wsz, L"\\Programs\\Tox.lnk");
+            DeleteFileW(wsz);
+        }
+
+        if (SUCCEEDED(SHGetFolderPathW(NULL, CSIDL_DESKTOPDIRECTORY, NULL, 0, wsz))) {
+            wcscat(wsz, L"\\Tox.lnk");
+            DeleteFileW(wsz);
+        }
+
+        RegDeleteKey(HKEY_CLASSES_ROOT, "tox");
+        DeleteFile(TOX_EXE_NAME);
+        DeleteFile(TOX_VERSION_FILENAME);
+        DeleteFile("uninstall.bat");
+        MessageBox(main_window, "uTox uninstalled.", "Error", MB_OK);
+        //TODO remove updater.
+    }
+
+    exit(0);
 }
 
 static void start_installation() {
@@ -566,8 +616,25 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR cmd, int n
         SetCurrentDirectory(path);
     }
 
-    LOG_FILE = fopen("tox_log.txt", "w");
+    LPWSTR *arglist;
+    int argc, i;
+
     init_tox_version_name();
+
+    /* Convert PSTR command line args from windows to argc */
+    arglist = CommandLineToArgvW(GetCommandLineW(), &argc);
+    if( NULL != arglist ){
+        for (i = 0; i < argc; i++) {
+            if(wcscmp(arglist[i], L"--uninstall") == 0) {
+                if (is_tox_installed) {
+                    uninstall_tox();
+                    return 0;
+                }
+            }
+        }
+    }
+
+    LOG_FILE = fopen("tox_log.txt", "w");
 
     /* initialize winsock */
     WSADATA wsaData;
@@ -614,6 +681,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR cmd, int n
         }
 
         progressbar = GetDlgItem(main_window, ID_PROGRESSBAR);
+        set_download_progress(0);
         status_label = GetDlgItem(main_window, IDC_STATUS_LABEL);
 
         // show installer controls
