@@ -590,6 +590,12 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR cmd, int n
         TOX_VERSION_NAME[0] = '6';
         TOX_VERSION_NAME[1] = '4';
         LOG_TO_FILE("detected 64bit system\n");
+    } else {
+        GET_NAME[3] = '3';
+        GET_NAME[4] = '2';
+        TOX_VERSION_NAME[0] = '3';
+        TOX_VERSION_NAME[1] = '2';
+        LOG_TO_FILE("detected 32bit system\n");
     }
 
     if (!is_tox_installed) {
