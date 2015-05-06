@@ -514,15 +514,19 @@ static void check_updates() {
     int new_version = check_new_version();
 
     if (new_version == -1) {
-        MessageBox(main_window, "Error fetching latest version data. Please check your internet connection.\n\nExiting now...", "Error", MB_OK);
-        exit(0);
+        if (!is_tox_installed) {
+            MessageBox(main_window, "Error fetching latest version data. Please check your internet connection.\n\nExiting now...", "Error", MB_OK);
+            exit(0);
+        } else {
+            open_utox_and_exit();
+        }
     }
 
     set_current_status("version data fetched successfully");
 
     if (is_tox_installed) {
 
-        set_download_progress(0);
+        ShowWindow(main_window, SW_SHOW);
         set_current_status("Found new version");
 
         if (new_version && MessageBox(NULL, "A new version of uTox is available.\nUpdate?", "uTox Updater", MB_YESNO | MB_ICONQUESTION) == IDYES) {
@@ -579,7 +583,6 @@ INT_PTR CALLBACK MainDialogProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM l
 
     return (INT_PTR)FALSE;
 }
-
 
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR cmd, int nCmdShow)
 {
@@ -665,25 +668,25 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR cmd, int n
         LOG_TO_FILE("detected 32bit system\n");
     }
 
+    /* init common controls */
+    INITCOMMONCONTROLSEX InitCtrlEx;
+
+    InitCtrlEx.dwSize = sizeof(INITCOMMONCONTROLSEX);
+    InitCtrlEx.dwICC = ICC_PROGRESS_CLASS;
+    InitCommonControlsEx(&InitCtrlEx);
+
+    main_window = CreateDialog(MY_HINSTANCE, MAKEINTRESOURCE(IDD_MAIN_DIALOG), NULL, MainDialogProc);
+
+    if (!main_window) {
+        LOG_TO_FILE("error creating main window %lu\n", GetLastError());
+        exit(0);
+    }
+
+    progressbar = GetDlgItem(main_window, ID_PROGRESSBAR);
+    set_download_progress(0);
+    status_label = GetDlgItem(main_window, IDC_STATUS_LABEL);
+
     if (!is_tox_installed) {
-        /* init common controls */
-        INITCOMMONCONTROLSEX InitCtrlEx;
-
-        InitCtrlEx.dwSize = sizeof(INITCOMMONCONTROLSEX);
-        InitCtrlEx.dwICC = ICC_PROGRESS_CLASS;
-        InitCommonControlsEx(&InitCtrlEx);
-
-        main_window = CreateDialog(MY_HINSTANCE, MAKEINTRESOURCE(IDD_MAIN_DIALOG), NULL, MainDialogProc);
-
-        if (!main_window) {
-            LOG_TO_FILE("error creating main window %lu\n", GetLastError());
-            exit(0);
-        }
-
-        progressbar = GetDlgItem(main_window, ID_PROGRESSBAR);
-        set_download_progress(0);
-        status_label = GetDlgItem(main_window, IDC_STATUS_LABEL);
-
         // show installer controls
         ShowWindow(GetDlgItem(main_window, ID_INSTALL_BUTTON), SW_SHOW);
 
