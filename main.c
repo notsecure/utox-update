@@ -356,7 +356,7 @@ static int install_tox(int create_desktop_shortcut, int create_startmenu_shortcu
         char str[MAX_PATH];
 
         HKEY key;
-        if (RegCreateKeyEx(HKEY_CLASSES_ROOT, "tox", 0, NULL, 0, KEY_ALL_ACCESS, NULL, &key, NULL) == ERROR_SUCCESS) {
+        if (RegCreateKeyEx(HKEY_CURRENT_USER, "Software\\Classes\\tox", 0, NULL, 0, KEY_ALL_ACCESS, NULL, &key, NULL) == ERROR_SUCCESS) {
             LOG_TO_FILE("nice\n");
             RegSetValueEx(key, NULL, 0, REG_SZ, (BYTE*)"URL:Tox Protocol", sizeof("URL:Tox Protocol"));
             RegSetValueEx(key, "URL Protocol", 0, REG_SZ, (BYTE*)"", sizeof(""));
@@ -396,7 +396,7 @@ static int uninstall_tox()
             DeleteFileW(wsz);
         }
 
-        RegDeleteKey(HKEY_CLASSES_ROOT, "tox");
+        RegDeleteTree(HKEY_CURRENT_USER, "Software\\Classes\\tox");
         DeleteFile(TOX_EXE_NAME);
         DeleteFile(TOX_VERSION_FILENAME);
         MessageBox(main_window, "uTox uninstalled.", "Error", MB_OK);
