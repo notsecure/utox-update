@@ -28,7 +28,7 @@
 #define TOX_UPDATER_FILENAME "utox_runner.exe"
 
 #define TOX_UNINSTALL_FILENAME "uninstall.bat"
-#define TOX_UNINSTALL_CONTENTS TOX_UPDATER_FILENAME " --uninstall\n"
+#define TOX_UNINSTALL_CONTENTS TOX_UPDATER_FILENAME " --uninstall\nIF NOT EXIST uTox.exe del utox_runner.exe\nIF NOT EXIST uTox.exe del uninstall.bat\n"
 
 static char TOX_VERSION_NAME[TOX_VERSION_NAME_MAX_LEN];
 
@@ -399,9 +399,7 @@ static int uninstall_tox()
         RegDeleteKey(HKEY_CLASSES_ROOT, "tox");
         DeleteFile(TOX_EXE_NAME);
         DeleteFile(TOX_VERSION_FILENAME);
-        DeleteFile("uninstall.bat");
         MessageBox(main_window, "uTox uninstalled.", "Error", MB_OK);
-        //TODO remove updater.
     }
 
     exit(0);
