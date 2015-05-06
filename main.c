@@ -48,6 +48,7 @@ static HWND main_window;
 static HWND progressbar;
 static HWND status_label;
 
+HANDLE utox_mutex_handle;
 
 void set_download_progress(int progress) {
     if (progressbar) {
@@ -77,6 +78,7 @@ static void open_utox_and_exit() {
     char str[strlen(MY_CMD_ARGS) + sizeof(UTOX_UPDATER_PARAM)];
     strcpy(str, MY_CMD_ARGS);
     strcat(str, UTOX_UPDATER_PARAM);
+    CloseHandle(utox_mutex_handle);
     ShellExecute(NULL, "open", TOX_EXE_NAME, str, NULL, SW_SHOW);
 
     fclose(LOG_FILE);
@@ -84,6 +86,7 @@ static void open_utox_and_exit() {
 }
 
 static void restart_updater() {
+    CloseHandle(utox_mutex_handle);
     ShellExecute(NULL, "open", TOX_UPDATER_PATH, MY_CMD_ARGS, NULL, SW_SHOW);
 
     fclose(LOG_FILE);
@@ -117,8 +120,6 @@ static _Bool install_new_updater(void *new_updater_data, uint32_t new_updater_da
     fwrite(new_updater_data, 1, new_updater_data_len, file);
 
     fclose(file);
-
-    ShellExecute(NULL, "open", TOX_UPDATER_PATH, NULL, NULL, SW_SHOW);
     return 1;
 #else
     /* self update not implemented */
@@ -586,19 +587,21 @@ INT_PTR CALLBACK MainDialogProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM l
 
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR cmd, int nCmdShow)
 {
-    unsigned int counter = 0;
-    while (1) {
-        CreateMutex(NULL, 0, UTOX_TITLE);
-        if (GetLastError() == ERROR_ALREADY_EXISTS) {
-            if (counter < 2) {
-                Sleep(500);
-                ++counter;
-            } else {
-                return 0;
-            }
-        } else {
-            break;
+    utox_mutex_handle = CreateMutex(NULL, 0, UTOX_TITLE);
+
+    if (!utox_mutex_handle) {
+        return 0;
+    }
+
+    if (GetLastError() == ERROR_ALREADY_EXISTS) {
+        HWND window = FindWindow(UTOX_TITLE, NULL);
+
+        /* uTox is running. */
+        if (window) {
+            SetForegroundWindow(window);
         }
+
+        return 0;
     }
 
     MY_CMD_ARGS = cmd;
