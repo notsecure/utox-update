@@ -28,7 +28,7 @@
 #define TOX_UPDATER_FILENAME "utox_runner.exe"
 
 #define TOX_UNINSTALL_FILENAME "uninstall.bat"
-#define TOX_UNINSTALL_CONTENTS TOX_UPDATER_FILENAME " --uninstall\nIF NOT EXIST uTox.exe del utox_runner.exe\nIF NOT EXIST uTox.exe del uninstall.bat\n"
+#define TOX_UNINSTALL_CONTENTS "cd %~dp0\n" TOX_UPDATER_FILENAME " --uninstall\nIF NOT EXIST uTox.exe del utox_runner.exe\nIF NOT EXIST uTox.exe del uninstall.bat\n"
 
 static char TOX_VERSION_NAME[TOX_VERSION_NAME_MAX_LEN];
 
@@ -298,6 +298,7 @@ static int install_tox(int create_desktop_shortcut, int create_startmenu_shortcu
         return ret;
 
     HRESULT hr;
+    HKEY key;
 
     if (create_desktop_shortcut || create_startmenu_shortcut) {
         hr = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
@@ -355,7 +356,6 @@ static int install_tox(int create_desktop_shortcut, int create_startmenu_shortcu
 
         char str[MAX_PATH];
 
-        HKEY key;
         if (RegCreateKeyEx(HKEY_CURRENT_USER, "Software\\Classes\\tox", 0, NULL, 0, KEY_ALL_ACCESS, NULL, &key, NULL) == ERROR_SUCCESS) {
             LOG_TO_FILE("nice\n");
             RegSetValueEx(key, NULL, 0, REG_SZ, (BYTE*)"URL:Tox Protocol", sizeof("URL:Tox Protocol"));
@@ -378,6 +378,23 @@ static int install_tox(int create_desktop_shortcut, int create_startmenu_shortcu
         }
     }
 
+  if (RegCreateKeyEx(HKEY_CURRENT_USER, "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\uTox", 0, NULL, 0, KEY_ALL_ACCESS, NULL, &key, NULL) == ERROR_SUCCESS) {
+        wchar_t icon[install_path_len + 64];
+        wchar_t uninstall[install_path_len + 64];
+        memcpy(icon, install_path, install_path_len * 2);
+        icon[install_path_len] = 0;
+        memcpy(uninstall, install_path, install_path_len * 2);
+        uninstall[install_path_len] = 0;
+
+        wcscat(icon, L"\\uTox.exe");
+        wcscat(uninstall, L"\\uninstall.bat");
+ 
+        RegSetValueEx(key, NULL, 0, REG_SZ, (BYTE*)"", sizeof(""));
+        RegSetValueEx(key, "DisplayName", 0, REG_SZ, (BYTE*)"uTox", sizeof("uTox"));
+        RegSetValueExW(key, L"InstallLocation", 0, REG_SZ, (BYTE*)install_path, wcslen(install_path) * 2);
+        RegSetValueExW(key, L"DisplayIcon", 0, REG_SZ, (BYTE*)icon, wcslen(icon) * 2);
+        RegSetValueExW(key, L"UninstallString", 0, REG_SZ, (BYTE*)uninstall, wcslen(uninstall) * 2);
+   }
     return 0;
 }
 
@@ -397,6 +414,7 @@ static int uninstall_tox()
         }
 
         RegDeleteTree(HKEY_CURRENT_USER, "Software\\Classes\\tox");
+        RegDeleteTree(HKEY_CURRENT_USER, "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\uTox");
         DeleteFile(TOX_EXE_NAME);
         DeleteFile(TOX_VERSION_FILENAME);
         MessageBox(main_window, "uTox uninstalled.", "Error", MB_OK);
