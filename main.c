@@ -28,7 +28,7 @@
 #define TOX_UPDATER_FILENAME "utox_runner.exe"
 
 #define TOX_UNINSTALL_FILENAME "uninstall.bat"
-#define TOX_UNINSTALL_CONTENTS "cd %~dp0\n" TOX_UPDATER_FILENAME " --uninstall\nIF NOT EXIST uTox.exe del utox_runner.exe\nIF NOT EXIST uTox.exe del uninstall.bat\n"
+#define TOX_UNINSTALL_CONTENTS "cd %~dp0\n" TOX_UPDATER_FILENAME " --uninstall\nIF NOT EXIST uTox.exe del utox_runner.exe\nIF NOT EXIST uTox.exe del uninstall.bat & exit\nexit\n"
 
 static char TOX_VERSION_NAME[TOX_VERSION_NAME_MAX_LEN];
 
@@ -383,11 +383,12 @@ static int install_tox(int create_desktop_shortcut, int create_startmenu_shortcu
         wchar_t uninstall[install_path_len + 64];
         memcpy(icon, install_path, install_path_len * 2);
         icon[install_path_len] = 0;
-        memcpy(uninstall, install_path, install_path_len * 2);
-        uninstall[install_path_len] = 0;
+        uninstall[0] = 0;
+        wcscat(uninstall, L"cmd /C start \"\" /MIN \"");
 
         wcscat(icon, L"\\uTox.exe");
-        wcscat(uninstall, L"\\uninstall.bat");
+        wcscat(uninstall, install_path);
+        wcscat(uninstall, L"\\uninstall.bat\"");
  
         RegSetValueEx(key, NULL, 0, REG_SZ, (BYTE*)"", sizeof(""));
         RegSetValueEx(key, "DisplayName", 0, REG_SZ, (BYTE*)"uTox", sizeof("uTox"));
