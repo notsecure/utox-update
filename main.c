@@ -265,6 +265,7 @@ static int write_uninstall()
 
     int len = fwrite(TOX_UNINSTALL_CONTENTS, 1, sizeof(TOX_UNINSTALL_CONTENTS) - 1, file);
 
+    fclose(file);
     if (len != sizeof(TOX_UNINSTALL_CONTENTS) - 1)
         return -1;
 
@@ -378,24 +379,24 @@ static int install_tox(int create_desktop_shortcut, int create_startmenu_shortcu
         }
     }
 
-  if (RegCreateKeyEx(HKEY_CURRENT_USER, "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\uTox", 0, NULL, 0, KEY_ALL_ACCESS, NULL, &key, NULL) == ERROR_SUCCESS) {
-        wchar_t icon[install_path_len + 64];
-        wchar_t uninstall[install_path_len + 64];
-        memcpy(icon, install_path, install_path_len * 2);
-        icon[install_path_len] = 0;
-        uninstall[0] = 0;
-        wcscat(uninstall, L"cmd /C start \"\" /MIN \"");
+    if (RegCreateKeyEx(HKEY_CURRENT_USER, "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\uTox", 0, NULL, 0, KEY_ALL_ACCESS, NULL, &key, NULL) == ERROR_SUCCESS) {
+            wchar_t icon[install_path_len + 64];
+            wchar_t uninstall[install_path_len + 64];
+            memcpy(icon, install_path, install_path_len * 2);
+            icon[install_path_len] = 0;
+            uninstall[0] = 0;
+            wcscat(uninstall, L"cmd /C start \"\" /MIN \"");
 
-        wcscat(icon, L"\\uTox.exe");
-        wcscat(uninstall, install_path);
-        wcscat(uninstall, L"\\uninstall.bat\"");
- 
-        RegSetValueEx(key, NULL, 0, REG_SZ, (BYTE*)"", sizeof(""));
-        RegSetValueEx(key, "DisplayName", 0, REG_SZ, (BYTE*)"uTox", sizeof("uTox"));
-        RegSetValueExW(key, L"InstallLocation", 0, REG_SZ, (BYTE*)install_path, wcslen(install_path) * 2);
-        RegSetValueExW(key, L"DisplayIcon", 0, REG_SZ, (BYTE*)icon, wcslen(icon) * 2);
-        RegSetValueExW(key, L"UninstallString", 0, REG_SZ, (BYTE*)uninstall, wcslen(uninstall) * 2);
-   }
+            wcscat(icon, L"\\uTox.exe");
+            wcscat(uninstall, install_path);
+            wcscat(uninstall, L"\\uninstall.bat\"");
+    
+            RegSetValueEx(key, NULL, 0, REG_SZ, (BYTE*)"", sizeof(""));
+            RegSetValueEx(key, "DisplayName", 0, REG_SZ, (BYTE*)"uTox", sizeof("uTox"));
+            RegSetValueExW(key, L"InstallLocation", 0, REG_SZ, (BYTE*)install_path, wcslen(install_path) * 2);
+            RegSetValueExW(key, L"DisplayIcon", 0, REG_SZ, (BYTE*)icon, wcslen(icon) * 2);
+            RegSetValueExW(key, L"UninstallString", 0, REG_SZ, (BYTE*)uninstall, wcslen(uninstall) * 2);
+    }
     return 0;
 }
 
@@ -424,6 +425,8 @@ static int uninstall_tox()
     exit(0);
 }
 
+#define UTOX_INSTALL_ENDED 18273
+
 static void start_installation() {
     HWND desktop_shortcut_checkbox = GetDlgItem(main_window, ID_DESKTOP_SHORTCUT_CHECKBOX);
     HWND startmenu_shortcut_checkbox = GetDlgItem(main_window, ID_STARTMENU_SHORTCUT_CHECKBOX);
@@ -437,6 +440,7 @@ static void start_installation() {
 
     if (install_path_len == 0) {
         MessageBox(main_window, "Please select a folder to install uTox in", "Error", MB_OK);
+        PostMessage(main_window, WM_APP, UTOX_INSTALL_ENDED, 0);
         return;
     }
 
@@ -446,9 +450,12 @@ static void start_installation() {
 
     LOG_TO_FILE("will install with options: %u %u %u %ls\n", create_desktop_shortcut, create_startmenu_shortcut, use_with_tox_url, install_path);
 
-    if (MessageBox(main_window, "Are you sure you want to continue?", "uTox Updater", MB_YESNO) != IDYES)
+    if (MessageBox(main_window, "Are you sure you want to continue?", "uTox Updater", MB_YESNO) != IDYES) {
+        PostMessage(main_window, WM_APP, UTOX_INSTALL_ENDED, 0);
         return;
+    }
 
+    ShowWindow(GetDlgItem(main_window, ID_INSTALL_BUTTON), SW_HIDE);
     int ret = install_tox(create_desktop_shortcut, create_startmenu_shortcut, use_with_tox_url, install_path, install_path_len);
     if (ret == 0) {
         set_current_status("installation complete");
@@ -465,6 +472,9 @@ static void start_installation() {
         MessageBox(main_window, "Installation failed. If it's not an internet issue please send the log file (tox_log.txt) to the developers.", "uTox Updater", MB_OK);
         exit(0);
     }
+
+    PostMessage(main_window, WM_APP, UTOX_INSTALL_ENDED, 0);
+    ShowWindow(GetDlgItem(main_window, ID_INSTALL_BUTTON), SW_SHOW);
 }
 
 static void set_utox_path(wchar_t *path)
@@ -530,6 +540,7 @@ static void check_updates() {
     set_current_status("fetching new version data...");
 
     int new_version = check_new_version();
+    set_download_progress(0);
 
     if (new_version == -1) {
         if (!is_tox_installed) {
@@ -541,6 +552,7 @@ static void check_updates() {
     }
 
     set_current_status("version data fetched successfully");
+    ShowWindow(GetDlgItem(main_window, ID_INSTALL_BUTTON), SW_SHOW);
 
     if (is_tox_installed) {
 
@@ -558,6 +570,8 @@ static void check_updates() {
 INT_PTR CALLBACK MainDialogProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam)
 {
     UNREFERENCED_PARAMETER(lParam);
+
+    static _Bool install_thread_running = 0;
 
     switch (message)
     {
@@ -585,7 +599,11 @@ INT_PTR CALLBACK MainDialogProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM l
                 break;
 
             case ID_INSTALL_BUTTON:
-                _beginthread(start_installation, 0, 0);
+
+                if (!install_thread_running) {
+                    if (_beginthread(start_installation, 0, 0) != -1)
+                        install_thread_running = 1;
+                }
 
                 break;
 
@@ -596,6 +614,11 @@ INT_PTR CALLBACK MainDialogProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM l
             }
         }
         break;
+    }
+
+    case WM_APP: {
+        if (wParam == UTOX_INSTALL_ENDED)
+            install_thread_running = 0;
     }
     }
 
@@ -708,8 +731,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR cmd, int n
 
     if (!is_tox_installed) {
         // show installer controls
-        ShowWindow(GetDlgItem(main_window, ID_INSTALL_BUTTON), SW_SHOW);
-
         HWND desktop_shortcut_checkbox = GetDlgItem(main_window, ID_DESKTOP_SHORTCUT_CHECKBOX);
         Button_SetCheck(desktop_shortcut_checkbox, 1);
         ShowWindow(desktop_shortcut_checkbox, SW_SHOW);
