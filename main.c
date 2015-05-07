@@ -427,6 +427,15 @@ static int uninstall_tox()
 
 #define UTOX_INSTALL_ENDED 18273
 
+static void buttons_enable(_Bool enable)
+{
+    Button_Enable(GetDlgItem(main_window, ID_INSTALL_BUTTON), enable);
+    Button_Enable(GetDlgItem(main_window, ID_BROWSE_BUTTON), enable);
+    Button_Enable(GetDlgItem(main_window, ID_DESKTOP_SHORTCUT_CHECKBOX), enable);
+    Button_Enable(GetDlgItem(main_window, ID_STARTMENU_SHORTCUT_CHECKBOX), enable);
+    Button_Enable(GetDlgItem(main_window, ID_TOX_URL_CHECKBOX), enable);
+}
+
 static void start_installation() {
     HWND desktop_shortcut_checkbox = GetDlgItem(main_window, ID_DESKTOP_SHORTCUT_CHECKBOX);
     HWND startmenu_shortcut_checkbox = GetDlgItem(main_window, ID_STARTMENU_SHORTCUT_CHECKBOX);
@@ -455,8 +464,7 @@ static void start_installation() {
         return;
     }
 
-    ShowWindow(GetDlgItem(main_window, ID_INSTALL_BUTTON), SW_HIDE);
-    ShowWindow(GetDlgItem(main_window, ID_BROWSE_BUTTON), SW_HIDE);
+    buttons_enable(0);
     int ret = install_tox(create_desktop_shortcut, create_startmenu_shortcut, use_with_tox_url, install_path, install_path_len);
     if (ret == 0) {
         set_current_status("installation complete");
@@ -475,8 +483,7 @@ static void start_installation() {
     }
 
     PostMessage(main_window, WM_APP, UTOX_INSTALL_ENDED, 0);
-    ShowWindow(GetDlgItem(main_window, ID_INSTALL_BUTTON), SW_SHOW);
-    ShowWindow(GetDlgItem(main_window, ID_BROWSE_BUTTON), SW_SHOW);
+    buttons_enable(1);
 }
 
 static void set_utox_path(wchar_t *path)
@@ -554,7 +561,7 @@ static void check_updates() {
     }
 
     set_current_status("version data fetched successfully");
-    ShowWindow(GetDlgItem(main_window, ID_INSTALL_BUTTON), SW_SHOW);
+    Button_Enable(GetDlgItem(main_window, ID_INSTALL_BUTTON), 1);
 
     if (is_tox_installed) {
 
@@ -747,6 +754,9 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR cmd, int n
         if (SHGetFolderPathW(NULL, CSIDL_APPDATA, NULL, 0, appdatalocal_path) == S_OK) {
             set_utox_path(appdatalocal_path);
         }
+
+        Button_Enable(GetDlgItem(main_window, ID_INSTALL_BUTTON), 0);
+        ShowWindow(GetDlgItem(main_window, ID_INSTALL_BUTTON), SW_SHOW);
 
         Edit_SetReadOnly(GetDlgItem(main_window, ID_BROWSE_TEXTBOX), 1);
         ShowWindow(GetDlgItem(main_window, ID_BROWSE_TEXTBOX), SW_SHOW);
