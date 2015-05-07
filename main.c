@@ -617,7 +617,9 @@ INT_PTR CALLBACK MainDialogProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM l
                 break;
 
             case ID_BROWSE_BUTTON:
+                buttons_enable(0);
                 browse_for_install_folder();
+                buttons_enable(1);
 
                 break;
             }
