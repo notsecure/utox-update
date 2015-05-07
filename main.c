@@ -456,6 +456,7 @@ static void start_installation() {
     }
 
     ShowWindow(GetDlgItem(main_window, ID_INSTALL_BUTTON), SW_HIDE);
+    ShowWindow(GetDlgItem(main_window, ID_BROWSE_BUTTON), SW_HIDE);
     int ret = install_tox(create_desktop_shortcut, create_startmenu_shortcut, use_with_tox_url, install_path, install_path_len);
     if (ret == 0) {
         set_current_status("installation complete");
@@ -475,6 +476,7 @@ static void start_installation() {
 
     PostMessage(main_window, WM_APP, UTOX_INSTALL_ENDED, 0);
     ShowWindow(GetDlgItem(main_window, ID_INSTALL_BUTTON), SW_SHOW);
+    ShowWindow(GetDlgItem(main_window, ID_BROWSE_BUTTON), SW_SHOW);
 }
 
 static void set_utox_path(wchar_t *path)
@@ -746,6 +748,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR cmd, int n
             set_utox_path(appdatalocal_path);
         }
 
+        Edit_SetReadOnly(GetDlgItem(main_window, ID_BROWSE_TEXTBOX), 1);
         ShowWindow(GetDlgItem(main_window, ID_BROWSE_TEXTBOX), SW_SHOW);
         ShowWindow(GetDlgItem(main_window, ID_BROWSE_BUTTON), SW_SHOW);
         ShowWindow(GetDlgItem(main_window, IDC_INSTALL_FOLDER_LABEL), SW_SHOW);
