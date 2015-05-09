@@ -403,7 +403,7 @@ static int install_tox(int create_desktop_shortcut, int create_startmenu_shortcu
 
 static int uninstall_tox()
 {
-    if (MessageBox(NULL, "Are you sure you want to uninstall uTox?", "uTox Updater", MB_YESNO | MB_ICONQUESTION) == IDYES) {
+    if (MessageBox(NULL, "Are you sure you want to uninstall uTox?", "uTox Updater", MB_YESNO | MB_ICONQUESTION | MB_SETFOREGROUND) == IDYES) {
         wchar_t wsz[MAX_PATH + 64];
 
         if (SUCCEEDED(SHGetFolderPathW(NULL, CSIDL_STARTMENU, NULL, 0, wsz))) {
@@ -420,7 +420,7 @@ static int uninstall_tox()
         SHDeleteKey(HKEY_CURRENT_USER, "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\uTox");
         DeleteFile(TOX_EXE_NAME);
         DeleteFile(TOX_VERSION_FILENAME);
-        MessageBox(main_window, "uTox uninstalled.", "Error", MB_OK);
+        MessageBox(main_window, "uTox uninstalled.", "Error", MB_OK | MB_SETFOREGROUND);
     }
 
     exit(0);
@@ -449,7 +449,7 @@ static void start_installation() {
     int install_path_len = GetWindowTextW(browse_textbox, install_path, MAX_PATH);
 
     if (install_path_len == 0) {
-        MessageBox(main_window, "Please select a folder to install uTox in", "Error", MB_OK);
+        MessageBox(main_window, "Please select a folder to install uTox in", "Error", MB_OK | MB_SETFOREGROUND);
         PostMessage(main_window, WM_APP, UTOX_INSTALL_ENDED, 0);
         return;
     }
@@ -460,7 +460,7 @@ static void start_installation() {
 
     LOG_TO_FILE("will install with options: %u %u %u %ls\n", create_desktop_shortcut, create_startmenu_shortcut, use_with_tox_url, install_path);
 
-    if (MessageBox(main_window, "Are you sure you want to continue?", "uTox Updater", MB_YESNO) != IDYES) {
+    if (MessageBox(main_window, "Are you sure you want to continue?", "uTox Updater", MB_YESNO | MB_SETFOREGROUND) != IDYES) {
         PostMessage(main_window, WM_APP, UTOX_INSTALL_ENDED, 0);
         return;
     }
@@ -470,7 +470,7 @@ static void start_installation() {
     if (ret == 0) {
         set_current_status("installation complete");
 
-        MessageBox(main_window, "Installation successful.", "uTox Updater", MB_OK);
+        MessageBox(main_window, "Installation successful.", "uTox Updater", MB_OK | MB_SETFOREGROUND);
         open_utox_and_exit();
     } else if (ret == -1) {
         set_current_status("could not write to install directory.");
@@ -479,7 +479,7 @@ static void start_installation() {
     } else {
         set_current_status("error during installation");
 
-        MessageBox(main_window, "Installation failed. If it's not an internet issue please send the log file (tox_log.txt) to the developers.", "uTox Updater", MB_OK);
+        MessageBox(main_window, "Installation failed. If it's not an internet issue please send the log file (tox_log.txt) to the developers.", "uTox Updater", MB_OK | MB_SETFOREGROUND);
         exit(0);
     }
 
@@ -554,7 +554,7 @@ static void check_updates() {
 
     if (new_version == -1) {
         if (!is_tox_installed) {
-            MessageBox(main_window, "Error fetching latest version data. Please check your internet connection.\n\nExiting now...", "Error", MB_OK);
+            MessageBox(main_window, "Error fetching latest version data. Please check your internet connection.\n\nExiting now...", "Error", MB_OK | MB_SETFOREGROUND);
             exit(0);
         } else {
             open_utox_and_exit();
@@ -569,7 +569,7 @@ static void check_updates() {
         ShowWindow(main_window, SW_SHOW);
         set_current_status("Found new version");
 
-        if (new_version && MessageBox(NULL, "A new version of uTox is available.\nUpdate?", "uTox Updater", MB_YESNO | MB_ICONQUESTION) == IDYES) {
+        if (new_version && MessageBox(NULL, "A new version of uTox is available.\nUpdate?", "uTox Updater", MB_YESNO | MB_ICONQUESTION | MB_SETFOREGROUND) == IDYES) {
             download_and_install_new_utox_version();
         }
 
@@ -598,7 +598,7 @@ INT_PTR CALLBACK MainDialogProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM l
 
             switch (id) {
             case ID_CANCEL_BUTTON:
-                if (MessageBox(main_window, "Are you sure you want to exit?", "uTox Updater", MB_YESNO) == IDYES) {
+                if (MessageBox(main_window, "Are you sure you want to exit?", "uTox Updater", MB_YESNO | MB_SETFOREGROUND) == IDYES) {
                     if (is_tox_installed) {
                         open_utox_and_exit();
                     }
