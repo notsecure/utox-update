@@ -566,11 +566,13 @@ static void check_updates() {
 
     if (is_tox_installed) {
 
-        ShowWindow(main_window, SW_SHOW);
-        set_current_status("Found new version");
+        if (new_version) {
+            ShowWindow(main_window, SW_SHOW);
+            set_current_status("Found new version");
 
-        if (new_version && MessageBox(NULL, "A new version of uTox is available.\nUpdate?", "uTox Updater", MB_YESNO | MB_ICONQUESTION | MB_SETFOREGROUND) == IDYES) {
-            download_and_install_new_utox_version();
+            if (MessageBox(NULL, "A new version of uTox is available.\nUpdate?", "uTox Updater", MB_YESNO | MB_ICONQUESTION | MB_SETFOREGROUND) == IDYES) {
+                download_and_install_new_utox_version();
+            }
         }
 
         open_utox_and_exit();
