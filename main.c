@@ -15,6 +15,7 @@
 #include <windowsx.h>
 #include <shlobj.h>
 #include <process.h>
+#include <shlwapi.h>
 
 #include "utils.h"
 #include "consts.h"
@@ -415,8 +416,8 @@ static int uninstall_tox()
             DeleteFileW(wsz);
         }
 
-        RegDeleteTree(HKEY_CURRENT_USER, "Software\\Classes\\tox");
-        RegDeleteTree(HKEY_CURRENT_USER, "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\uTox");
+        SHDeleteKey(HKEY_CURRENT_USER, "Software\\Classes\\tox");
+        SHDeleteKey(HKEY_CURRENT_USER, "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\uTox");
         DeleteFile(TOX_EXE_NAME);
         DeleteFile(TOX_VERSION_FILENAME);
         MessageBox(main_window, "uTox uninstalled.", "Error", MB_OK);
