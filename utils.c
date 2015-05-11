@@ -324,8 +324,11 @@ void *download_loop_all_host_ips(_Bool compressed, const char *hosts[], size_t n
             }
 
             *downloaded_len = dled_len;
+            freeaddrinfo(root);
             return data;
         } while ((info = info->ai_next));
+
+        freeaddrinfo(root);
     }
 
     return NULL;
