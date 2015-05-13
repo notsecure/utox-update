@@ -16,6 +16,7 @@
 #include <shlobj.h>
 #include <process.h>
 #include <shlwapi.h>
+#include <versionhelpers.h>
 
 #include "utils.h"
 #include "consts.h"
@@ -703,26 +704,34 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR cmd, int n
         return 1;
     }
 
-    /* check if we are on a 64-bit system */
-    _Bool iswow64 = 0;
-    _Bool (WINAPI *fnIsWow64Process)(HANDLE, _Bool*)  = (void*)GetProcAddress(GetModuleHandleA("kernel32"),"IsWow64Process");
-    if(fnIsWow64Process) {
-        fnIsWow64Process(GetCurrentProcess(), &iswow64);
-    }
+    if (IsWindowsVistaOrGreater()) {
+        /* check if we are on a 64-bit system */
+        _Bool iswow64 = 0;
+        _Bool (WINAPI *fnIsWow64Process)(HANDLE, _Bool*)  = (void*)GetProcAddress(GetModuleHandleA("kernel32"),"IsWow64Process");
+        if(fnIsWow64Process) {
+            fnIsWow64Process(GetCurrentProcess(), &iswow64);
+        }
 
-    if(iswow64) {
-        /* replace the arch in the GET_NAME/TOX_VERSION_NAME strings (todo: not use constants for offsets) */
-        GET_NAME[3] = '6';
-        GET_NAME[4] = '4';
-        TOX_VERSION_NAME[0] = '6';
-        TOX_VERSION_NAME[1] = '4';
-        LOG_TO_FILE("detected 64bit system\n");
+        if(iswow64) {
+            /* replace the arch in the GET_NAME/TOX_VERSION_NAME strings (todo: not use constants for offsets) */
+            GET_NAME[3] = '6';
+            GET_NAME[4] = '4';
+            TOX_VERSION_NAME[0] = '6';
+            TOX_VERSION_NAME[1] = '4';
+            LOG_TO_FILE("detected 64bit system\n");
+        } else {
+            GET_NAME[3] = '3';
+            GET_NAME[4] = '2';
+            TOX_VERSION_NAME[0] = '3';
+            TOX_VERSION_NAME[1] = '2';
+            LOG_TO_FILE("detected 32bit system\n");
+        }
     } else {
-        GET_NAME[3] = '3';
-        GET_NAME[4] = '2';
-        TOX_VERSION_NAME[0] = '3';
-        TOX_VERSION_NAME[1] = '2';
-        LOG_TO_FILE("detected 32bit system\n");
+        GET_NAME[3] = 'x';
+        GET_NAME[4] = 'p';
+        TOX_VERSION_NAME[0] = 'x';
+        TOX_VERSION_NAME[1] = 'p';
+        LOG_TO_FILE("detected XP system\n");
     }
 
     /* init common controls */
