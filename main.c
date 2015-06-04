@@ -38,6 +38,7 @@ static char TOX_UPDATER_PATH[MAX_PATH];
 static uint32_t TOX_UPDATER_PATH_LEN;
 
 static _Bool is_tox_installed;
+static _Bool is_tox_set_start_on_boot;
 
 // Called arguments
 
@@ -75,11 +76,17 @@ static void init_tox_version_name() {
 }
 
 #define UTOX_UPDATER_PARAM " --no-updater"
+#define UTOX_SET_START_ON_BOOT_PARAM " --set=start-on-boot"
 
 static void open_utox_and_exit() {
-    char str[strlen(MY_CMD_ARGS) + sizeof(UTOX_UPDATER_PARAM)];
+    char str[strlen(MY_CMD_ARGS) + sizeof(UTOX_UPDATER_PARAM) + sizeof(UTOX_SET_START_ON_BOOT_PARAM)];
     strcpy(str, MY_CMD_ARGS);
     strcat(str, UTOX_UPDATER_PARAM);
+
+    if (is_tox_set_start_on_boot) {
+        strcat(str, UTOX_SET_START_ON_BOOT_PARAM);
+    }
+
     CloseHandle(utox_mutex_handle);
     ShellExecute(NULL, "open", TOX_EXE_NAME, str, NULL, SW_SHOW);
 
@@ -419,6 +426,7 @@ static int uninstall_tox()
 
         SHDeleteKey(HKEY_CURRENT_USER, "Software\\Classes\\tox");
         SHDeleteKey(HKEY_CURRENT_USER, "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\uTox");
+        SHDeleteValue(HKEY_CURRENT_USER, "Software\\Microsoft\\Windows\\CurrentVersion\\Run", "uTox");
         DeleteFile(TOX_EXE_NAME);
         DeleteFile(TOX_VERSION_FILENAME);
         MessageBox(main_window, "uTox uninstalled.", "Error", MB_OK | MB_SETFOREGROUND);
@@ -441,6 +449,7 @@ static void buttons_enable(_Bool enable)
 static void start_installation() {
     HWND desktop_shortcut_checkbox = GetDlgItem(main_window, ID_DESKTOP_SHORTCUT_CHECKBOX);
     HWND startmenu_shortcut_checkbox = GetDlgItem(main_window, ID_STARTMENU_SHORTCUT_CHECKBOX);
+    HWND start_on_boot_checkbox = GetDlgItem(main_window, ID_START_ON_BOOT_CHECKBOX);
     HWND tox_url_checkbox = GetDlgItem(main_window, ID_TOX_URL_CHECKBOX);
     HWND browse_textbox = GetDlgItem(main_window, ID_BROWSE_TEXTBOX);
 
@@ -458,6 +467,7 @@ static void start_installation() {
     create_desktop_shortcut = Button_GetCheck(desktop_shortcut_checkbox);
     create_startmenu_shortcut = Button_GetCheck(startmenu_shortcut_checkbox);
     use_with_tox_url = Button_GetCheck(tox_url_checkbox);
+    is_tox_set_start_on_boot = Button_GetCheck(start_on_boot_checkbox);
 
     LOG_TO_FILE("will install with options: %u %u %u %ls\n", create_desktop_shortcut, create_startmenu_shortcut, use_with_tox_url, install_path);
 
@@ -761,6 +771,10 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR cmd, int n
         HWND startmenu_shortcut_checkbox = GetDlgItem(main_window, ID_STARTMENU_SHORTCUT_CHECKBOX);
         Button_SetCheck(startmenu_shortcut_checkbox, 1);
         ShowWindow(startmenu_shortcut_checkbox, SW_SHOW);
+
+        HWND start_on_boot_checkbox = GetDlgItem(main_window, ID_START_ON_BOOT_CHECKBOX);
+        Button_SetCheck(start_on_boot_checkbox, 1);
+        ShowWindow(start_on_boot_checkbox, SW_SHOW);
 
         ShowWindow(GetDlgItem(main_window, ID_TOX_URL_CHECKBOX), SW_SHOW);
 

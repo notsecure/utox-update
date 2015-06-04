@@ -13,3 +13,4 @@
 #define ID_CANCEL_BUTTON                        1009
 #define IDC_STATUS_LABEL                        1010
 #define IDC_INSTALL_FOLDER_LABEL                1012
+#define ID_START_ON_BOOT_CHECKBOX               1013
