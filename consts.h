@@ -9,11 +9,12 @@
 
 #define VERSION 3
 
-#define NUMBER_UPDATE_HOSTS 2
+#define NUMBER_UPDATE_HOSTS 3
 
 static const char *TOX_DOWNNLOAD_HOSTS[NUMBER_UPDATE_HOSTS] = {
     "dl.utox.org",
-    "dl.u.tox.im"
+    "dl.u.tox.im",
+    "irungentoo.github.io"
 };
 
 #define SELF_UPDATER_FILE_NAME "winselfpdate"
