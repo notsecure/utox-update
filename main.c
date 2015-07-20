@@ -579,7 +579,7 @@ static void check_updates() {
 
         if (new_version) {
             ShowWindow(main_window, SW_SHOW);
-            set_current_status("Found new version");
+            set_current_status("found new version");
 
             if (MessageBox(NULL, "A new version of uTox is available.\nUpdate?", "uTox Updater", MB_YESNO | MB_ICONQUESTION | MB_SETFOREGROUND) == IDYES) {
                 download_and_install_new_utox_version();
