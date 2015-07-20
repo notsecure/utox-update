@@ -429,7 +429,7 @@ static int uninstall_tox()
         SHDeleteValue(HKEY_CURRENT_USER, "Software\\Microsoft\\Windows\\CurrentVersion\\Run", "uTox");
         DeleteFile(TOX_EXE_NAME);
         DeleteFile(TOX_VERSION_FILENAME);
-        MessageBox(main_window, "uTox uninstalled.", "Error", MB_OK | MB_SETFOREGROUND);
+        MessageBox(main_window, "uTox uninstalled.", "uTox Updater", MB_OK | MB_SETFOREGROUND);
     }
 
     exit(0);
