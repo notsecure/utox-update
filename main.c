@@ -429,7 +429,7 @@ static int uninstall_tox()
         SHDeleteValue(HKEY_CURRENT_USER, "Software\\Microsoft\\Windows\\CurrentVersion\\Run", "uTox");
         DeleteFile(TOX_EXE_NAME);
         DeleteFile(TOX_VERSION_FILENAME);
-        MessageBox(main_window, "uTox uninstalled.", "Error", MB_OK | MB_SETFOREGROUND);
+        MessageBox(main_window, "uTox uninstalled.", "uTox Updater", MB_OK | MB_SETFOREGROUND);
     }
 
     exit(0);
@@ -579,7 +579,7 @@ static void check_updates() {
 
         if (new_version) {
             ShowWindow(main_window, SW_SHOW);
-            set_current_status("Found new version");
+            set_current_status("found new version");
 
             if (MessageBox(NULL, "A new version of uTox is available.\nUpdate?", "uTox Updater", MB_YESNO | MB_ICONQUESTION | MB_SETFOREGROUND) == IDYES) {
                 download_and_install_new_utox_version();
